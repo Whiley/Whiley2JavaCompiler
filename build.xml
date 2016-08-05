@@ -9,6 +9,7 @@
     <pathelement path="${WYBS_JAR}"/>
     <pathelement path="${WYC_JAR}"/>
     <pathelement path="${WYIL_JAR}"/>
+    <pathelement path="${WYCS_JAR}"/>
     <pathelement path="${JASM_JAR}"/>
     <path refid="junit.classpath"/>
   </path>
@@ -121,8 +122,6 @@
 	<include name="wyautl/**/*.class"/>
 	<include name="wyrl/**/*.class"/>
 	<include name="wyrw/**/*.class"/>
-	<include name="wycs/**/*.class"/>
-	<include name="wycs/**/*.wycs"/>	
       </fileset>
     </jar>
     <delete dir="tmp"/>

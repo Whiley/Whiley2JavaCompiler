@@ -30,7 +30,7 @@ import java.math.BigInteger;
 import java.util.*;
 
 import wyfs.io.BinaryInputStream;
-import wyrl.io.JavaIdentifierInputStream;
+import wyjc.util.JavaIdentifierInputStream;
 import static wyil.lang.Type.K_VOID;
 import static wyil.lang.Type.K_ANY;
 import static wyil.lang.Type.K_META;

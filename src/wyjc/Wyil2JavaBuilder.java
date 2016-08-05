@@ -50,10 +50,6 @@ import wyil.lang.Bytecode.VariableDeclaration;
 import static wyil.lang.Bytecode.*;
 import wyil.util.TypeSystem;
 
-import static wyjc.Wyil2JavaBuilder.WHILEYBOOL;
-import static wyjc.Wyil2JavaBuilder.WHILEYTYPE;
-import static wyjc.Wyil2JavaBuilder.WHILEYUTIL;
-
 import wyjc.util.BytecodeTranslators;
 import wyjc.util.LambdaTemplate;
 import wyjc.util.WyjcBuildTask;
@@ -64,7 +60,7 @@ import jasm.lang.Bytecode;
 import jasm.lang.Modifier;
 import static jasm.lang.Modifier.*;
 import jasm.verifier.ClassFileVerifier;
-import wyrl.io.JavaIdentifierOutputStream;
+import wyjc.util.JavaIdentifierOutputStream;
 import static jasm.lang.JvmTypes.*;
 
 /**

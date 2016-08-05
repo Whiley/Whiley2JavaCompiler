@@ -15,6 +15,7 @@
   <property name="WYBS_JAR" value="lib/wybs-v0.4.0-SNAPSHOT.jar"/>
   <property name="WYC_JAR" value="lib/wyc-v0.4.0-SNAPSHOT.jar"/>
   <property name="WYIL_JAR" value="lib/wyil-v0.4.0-SNAPSHOT.jar"/>
+  <property name="WYCS_JAR" value="lib/wycs-v0.4.0.jar"/>  
   <property name="JASM_JAR" value="lib/jasm-v0.1.7.jar"/>      
 
   <!-- Set the classpath for Junit and its dependencies -->
