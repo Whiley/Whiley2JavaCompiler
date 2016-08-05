@@ -49,6 +49,8 @@
     <junit fork="true" dir="${basedir}" failureProperty="tests.failed" printsummary="yes" showoutput="yes" outputtoformatters="no">
       <classpath>
 	<pathelement path="src"/>
+	<pathelement path="tests/valid"/>
+	<pathelement path="tests/invalid"/>
         <path refid="wyjc.classpath"/>
       </classpath>
       <sysproperty key="test.name.contains" value="${test.name.contains}"/>

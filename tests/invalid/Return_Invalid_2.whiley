@@ -1,0 +1,2 @@
+function f() :
+    return true

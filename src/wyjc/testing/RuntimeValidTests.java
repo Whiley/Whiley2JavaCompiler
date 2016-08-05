@@ -126,44 +126,7 @@ public class RuntimeValidTests {
 	 * The directory containing the source files for each test case. Every test
 	 * corresponds to a file in this directory.
 	 */
-	public final static String WHILEY_SRC_DIR = "../../tests/valid".replace('/', File.separatorChar);
-
-	/**
-	 * The path to the Whiley-2-Java class files. These are needed so we can
-	 * access the JVM compiled version of the Whiley standard library, along
-	 * with additional runtime support classes.
-	 */
- 	private static final String WYJC_CLASS_DIR="../../modules/wyjc/src/".replace('/', File.separatorChar);
-
-	private static final String WYBS_CLASS_DIR="../../modules/wybs/src/".replace('/', File.separatorChar);
-	
- 	private static final String WYRL_CLASS_DIR="../../lib/wyrl-v0.4.4.jar".replace('/', File.separatorChar);
-
-	/**
-	 * The directory where compiler libraries are stored. This is necessary
-	 * since it will contain the Whiley Runtime.
-	 */
-	public final static String WYC_LIB_DIR = "../../lib/".replace('/', File.separatorChar);
-
-	/**
-	 * The path to the Whiley RunTime (WyRT) library. This contains the Whiley
-	 * standard library, which includes various helper functions, etc.
-	 */
-	private static String WYRT_PATH;
-
-	static {
-
-		// The purpose of this is to figure out what the proper name for the
-		// wyrt file is. Since there can be multiple versions of this file,
-		// we're not sure which one to pick.
-
-		File file = new File(WYC_LIB_DIR);
-		for(String f : file.list()) {
-			if(f.startsWith("wyrt-v")) {
-				WYRT_PATH = WYC_LIB_DIR + f;
-			}
-		}
-	}
+	public final static String WHILEY_SRC_DIR = "tests/valid".replace('/', File.separatorChar);
 
 	// ======================================================================
 	// Test Harness
@@ -185,7 +148,6 @@ public class RuntimeValidTests {
  		int r = compile(
  				"-wd", WHILEY_SRC_DIR,      // location of source directory
  				"-cd", WHILEY_SRC_DIR,      // location where to place class files
- 				"-wp", WYRT_PATH,           // add wyrt to whileypath
  				filename);             // name of test to compile
 
  		if (r != WycMain.SUCCESS) {
@@ -193,12 +155,9 @@ public class RuntimeValidTests {
  		} else if (r == WycMain.INTERNAL_FAILURE) {
  			fail("Test caused internal failure!");
  		}
-
-		String CLASSPATH = CLASSPATH(WHILEY_SRC_DIR, WYJC_CLASS_DIR,
-				WYRL_CLASS_DIR, WYBS_CLASS_DIR);
-
  		// Second, execute the generated Java Program.
- 		String output = execClass(CLASSPATH,WHILEY_SRC_DIR,"wyjc.testing.RuntimeValidTests",name);
+ 		String CLASSPATH=System.getProperty("java.class.path");
+ 		String output = execClass(CLASSPATH,".","wyjc.testing.RuntimeValidTests",name);
  		if(!output.equals("")) {
  			System.out.println(output);
  			fail("unexpected output!");
@@ -253,7 +212,7 @@ public class RuntimeValidTests {
 	 * @param components
 	 * @return
 	 */
-	public String CLASSPATH(String... components) {
+	public static String CLASSPATH(String... components) {
 		String r = "";
 		boolean firstTime = true;
 		for (String c : components) {
