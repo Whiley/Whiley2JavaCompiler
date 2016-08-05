@@ -1,0 +1,25 @@
+<project name="BuildConfig" xmlns:maven="urn:maven-ant">
+  <!-- Get the root directory of the project by looking at the directory enclosing this file. -->
+  <dirname property="rootdir" file="${ant.file.BuildConfig}"/>
+  <!-- Set the current Whiley version -->
+  <property name="version" value="0.4.0"/>
+  <!-- Load the Maven Ant tasks so that we can work with Maven repositories. -->
+  <typedef uri="urn:maven-ant"
+           classpath="${rootdir}/lib/maven-ant-tasks-2.1.3.jar"
+           resource="org/apache/maven/artifact/ant/antlib.xml"/>
+
+  <!-- Paths to common JARs -->
+  <property name="LIB_DIR" value="${rootdir}/lib/"/>
+  <property name="DIST_DIR" value="${rootdir}/dist/"/>
+
+  <property name="WYBS_JAR" value="lib/wybs-v0.4.0-SNAPSHOT.jar"/>
+  <property name="WYC_JAR" value="lib/wyc-v0.4.0-SNAPSHOT.jar"/>
+  <property name="WYIL_JAR" value="lib/wyil-v0.4.0-SNAPSHOT.jar"/>
+  <property name="JASM_JAR" value="lib/jasm-v0.1.7.jar"/>      
+
+  <!-- Set the classpath for Junit and its dependencies -->
+  <maven:dependencies pathId="junit.classpath">
+    <dependency groupId="junit" artifactId="junit" version="4.12"/>
+  </maven:dependencies>
+
+</project>
