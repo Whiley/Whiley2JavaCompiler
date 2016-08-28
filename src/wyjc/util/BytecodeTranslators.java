@@ -9,7 +9,7 @@ import java.util.Collections;
 
 import jasm.lang.Bytecode;
 import jasm.lang.JvmType;
-import wycc.util.ResolveError;
+import wybs.util.ResolveError;
 import wyil.lang.SyntaxTree;
 import wyil.lang.SyntaxTree.Location;
 import wyil.lang.Type;

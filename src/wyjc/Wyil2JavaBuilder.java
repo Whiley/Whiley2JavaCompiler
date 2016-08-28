@@ -30,13 +30,12 @@ import java.math.BigInteger;
 import java.util.*;
 
 import wybs.lang.Build;
-import wybs.lang.Builder;
-import wycc.lang.Attribute;
-import wycc.lang.NameID;
-import wycc.lang.SyntaxError.InternalFailure;
+import wybs.lang.Attribute;
+import wybs.lang.NameID;
+import wybs.lang.SyntaxError.InternalFailure;
 import wycc.util.Logger;
 import wycc.util.Pair;
-import wycc.util.ResolveError;
+import wybs.util.ResolveError;
 import wycc.util.Triple;
 import wyfs.io.BinaryOutputStream;
 import wyfs.lang.Path;
@@ -71,7 +70,7 @@ import static jasm.lang.JvmTypes.*;
  * @author David J. Pearce
  *
  */
-public class Wyil2JavaBuilder implements Builder {
+public class Wyil2JavaBuilder implements Build.Task {
 	private static int CLASS_VERSION = 49;
 
 	/**
