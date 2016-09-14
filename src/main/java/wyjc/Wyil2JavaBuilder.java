@@ -120,7 +120,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * List of temporary methods created to implement lambda expressions
 	 */
 	private ArrayList<ClassFile.Method> lambdaMethods;
-	
+
 	/**
 	 * List of line number entries for current function / method being compiled.
 	 */
@@ -136,10 +136,12 @@ public class Wyil2JavaBuilder implements Build.Task {
 		this.logger = logger;
 	}
 
+	@Override
 	public Build.Project project() {
 		return project;
 	}
 
+	@Override
 	public Set<Path.Entry<?>> build(Collection<Pair<Path.Entry<?>, Path.Root>> delta, Build.Graph graph)
 			throws IOException {
 
@@ -160,9 +162,9 @@ public class Wyil2JavaBuilder implements Build.Task {
 			generatedFiles.add(target);
 
 			// Translate WyilFile into JVM ClassFile
-			
+
 			// FIXME: put these in the context?
-			
+
 			lambdaClasses = new ArrayList<ClassFile>();
 			lambdaMethods = new ArrayList<ClassFile.Method>();
 			ClassFile contents = build(source.read());
@@ -188,7 +190,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 				new ClassFileVerifier().apply(lc);
 				lf.write(lc);
 				generatedFiles.add(lf);
-			}			
+			}
 		}
 
 		// ========================================================================
@@ -243,7 +245,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	private void buildValues(HashMap<JvmConstant, Integer> constants, ArrayList<ClassFile> lambdas, ClassFile cf) {
 		int nvalues = 0;
 		Context context = new Context();
-		
+
 		for (Map.Entry<JvmConstant, Integer> entry : constants.entrySet()) {
 			JvmConstant c = entry.getKey();
 			if (c instanceof JvmValue) {
@@ -270,7 +272,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			JvmType.Function ftype = new JvmType.Function(new JvmType.Void());
 			ClassFile.Method clinit = new ClassFile.Method("<clinit>", ftype, modifiers);
 			cf.methods().add(clinit);
-			// finally add code for staticinitialiser method			
+			// finally add code for staticinitialiser method
 			jasm.attributes.Code code = new jasm.attributes.Code(context.getBytecodes(), Collections.EMPTY_LIST, clinit);
 			clinit.attributes().add(code);
 		}
@@ -278,15 +280,15 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	private ClassFile.Method buildMainLauncher(JvmType.Clazz owner) {
 		List<Modifier> modifiers = modifiers(ACC_PUBLIC, ACC_SYNTHETIC, ACC_STATIC);
-		JvmType.Function ft1 = new JvmType.Function(T_VOID, new JvmType.Array(JAVA_LANG_STRING));
+		JvmType.Function ft1 = new JvmType.Function(VOID, new JvmType.Array(JAVA_LANG_STRING));
 		ClassFile.Method cm = new ClassFile.Method("main", ft1, modifiers);
 		JvmType.Array strArr = new JvmType.Array(JAVA_LANG_STRING);
 		ArrayList<Bytecode> codes = new ArrayList<Bytecode>();
 		ft1 = new JvmType.Function(WHILEYRECORD, new JvmType.Array(JAVA_LANG_STRING));
 		codes.add(new Bytecode.Load(0, strArr));
 		codes.add(new Bytecode.Invoke(WHILEYUTIL, "systemConsole", ft1, Bytecode.InvokeMode.STATIC));
-		Type.Method wyft = Type.Method(new Type[0], Collections.<String> emptySet(), Collections.<String> emptyList(),
-				WHILEY_SYSTEM_T);
+		Type.Method wyft = (Type.Method) Type.Method(Collections.<String> emptySet(), Collections.<String> emptyList(),new Type[0],
+				new Type[]{WHILEY_SYSTEM_T});
 		JvmType.Function ft3 = convertFunType(wyft);
 		codes.add(new Bytecode.Invoke(owner, nameMangle("main", wyft), ft3, Bytecode.InvokeMode.STATIC));
 		codes.add(new Bytecode.Return(null));
@@ -299,7 +301,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Construct a method for accepting the constraints on this particular type.
-	 * 
+	 *
 	 * @param td
 	 */
 	private ClassFile.Method build(WyilFile.Type td) {
@@ -307,7 +309,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		//
 		JvmType underlyingType = toJvmType(td.type());
 		List<Modifier> modifiers = modifiers(ACC_PUBLIC, ACC_STATIC, ACC_SYNTHETIC);
-		JvmType.Function funType = new JvmType.Function(T_BOOL, underlyingType);
+		JvmType.Function funType = new JvmType.Function(BOOL, underlyingType);
 		ClassFile.Method cm = new ClassFile.Method(td.name() + "$typeof", funType, modifiers);
 		// Generate code for testing implicit invariants of type (if any). That
 		// is, invariants implied by (nominal) component types.
@@ -318,10 +320,10 @@ public class Wyil2JavaBuilder implements Build.Task {
 		// this, we chain them together into a sequence of checks.
 		for (int i = 0; i != td_invariants.size(); ++i) {
 			translateExpression(td_invariants.get(i), context);
-			JvmType.Function ft = new JvmType.Function(JvmTypes.T_BOOL);
+			JvmType.Function ft = new JvmType.Function(JvmTypes.BOOL);
 			context.add(new Bytecode.Invoke(WHILEYBOOL, "value", ft, Bytecode.InvokeMode.VIRTUAL));
 			context.add(new Bytecode.If(Bytecode.IfMode.EQ, falseLabel));
-		}			
+		}
 		// If we reach this point, then invariants must hold.
 		context.add(new Bytecode.LoadConst(true));
 		context.add(new Bytecode.Return(new JvmType.Bool()));
@@ -366,7 +368,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * This method is implemented elsewhere and must be provided by the author
 	 * of this module. For export methods, this means providing a method without
 	 * name mangling which redirects to the method with name mangling.
-	 * 
+	 *
 	 * @param method
 	 * @param constants
 	 * @return
@@ -394,7 +396,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	/**
 	 * Construct the body a "trampoline" method for handling native and export
 	 * methods.
-	 * 
+	 *
 	 * @param method
 	 * @return
 	 */
@@ -420,8 +422,8 @@ public class Wyil2JavaBuilder implements Build.Task {
 		bytecodes.add(new Bytecode.Invoke(targetClass, targetMethod, convertFunType(ft), Bytecode.InvokeMode.STATIC));
 		// Finally, return any values obtained from the invocation as necessary
 		JvmType returnType = null;
-		if (!ft.returns().isEmpty()) {
-			returnType = toJvmType(ft.returns().get(0));
+		if (ft.returns().length > 0) {
+			returnType = toJvmType(ft.returns()[0]);
 		}
 		bytecodes.add(new Bytecode.Return(returnType));
 		// Done
@@ -432,7 +434,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * Translate a given method or function. This generates a corresponding
 	 * function or method on the JVM which has the same name, plus a type
 	 * mangle.
-	 * 
+	 *
 	 * @param method
 	 * @return
 	 */
@@ -446,7 +448,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		ClassFile.Method cm = new ClassFile.Method(name, ft, modifiers);
 		// Translate the method body
 		lineNumbers = new ArrayList<LineNumberTable.Entry>();
-		Context context = new Context();		
+		Context context = new Context();
 		translateBlock(method.getBody(),context);
 		// Add return bytecode (if necessary)
 		addReturnBytecode(context);
@@ -463,7 +465,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	/**
 	 * Every JVM method must be terminated by a return bytecode. This method
 	 * simply adds one if none was already generated.
-	 * 
+	 *
 	 * @param context
 	 */
 	private void addReturnBytecode(Context context) {
@@ -486,7 +488,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	/**
 	 * Translates all bytecodes in a given code block. This may be an outermost
 	 * block, or a nested block as part of e.g. a loop.
-	 * 
+	 *
 	 * @param parentIndex
 	 *            The index of the enclosing bytecode (e.g. loop), or null (if
 	 *            outermost)
@@ -505,7 +507,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * Translate a WyIL bytecode at a given index into one or more JVM
 	 * bytecodes. The bytecode index is given to help with debugging (i.e. to
 	 * extract attributes associated with the given bytecode).
-	 * 
+	 *
 	 */
 	private void translateStatement(Location<?> stmt, Context context) {
 		try {
@@ -558,7 +560,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			case OPCODE_vardecl:
 			case OPCODE_vardeclinit:
 				translateVariableDeclaration((Location<VariableDeclaration>) stmt, context);
-				break;	
+				break;
 			default:
 				throw new InternalFailure("unknown bytecode encountered (" + stmt + ")", file.getEntry(), stmt);
 			}
@@ -579,7 +581,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Translate an assignment statement.
-	 * 
+	 *
 	 * @param code
 	 * @param context
 	 */
@@ -622,7 +624,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * single value into an lval, which could be either a variable, a field
 	 * assignment, an array element assignment or a dereference assignment. The
 	 * assigned value is assumed to have already been loaded on the stack.
-	 * 
+	 *
 	 * @param lhs
 	 * @param rhsType
 	 */
@@ -646,7 +648,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * Translate the assignment to an LVal by iterating through the chain of
 	 * LVals, starting at the outermost and working inwards. For example:
 	 * </p>
-	 * 
+	 *
 	 * <pre>
 	 * xs[i].f = 0
 	 * </pre>
@@ -657,7 +659,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * for each level onto the next, which returns the "updated" value that we
 	 * then apply.
 	 * </p>
-	 * 
+	 *
 	 * @param iterator
 	 *            --- Update iterator.
 	 * @param context
@@ -680,18 +682,18 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * Translate an assignment to an Array Lval. There are two essential cases
 	 * to consider:
 	 * </p>
-	 * 
+	 *
 	 * <pre>
 	 * x[i] = 0
 	 * x.f[i] = 0
 	 * </pre>
-	 * 
+	 *
 	 * <p>
 	 * In the first one, we have the array LVal as the "outermost" component of
 	 * the assignment. In the second one, it is part of an assignment to a
 	 * larger LVal which contains it (in this case, a record LVal).
 	 * </p>
-	 * 
+	 *
 	 * @param lval
 	 * @param iterator
 	 * @param code
@@ -714,7 +716,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			// This is the innermost case, hence we can avoid the unnecessary
 			// read of the current value and, instead, just return the rhs value
 			// directly.
-			Type type = lval.type.element();
+			Type type = lval.type.getWriteableElementType();
 			context.add(new Bytecode.Load(lval.index.getIndex(), WHILEYINT));
 			context.add(new Bytecode.Load(rhs, toJvmType(type)));
 			context.addWriteConversion(type);
@@ -733,7 +735,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			context.add(new Bytecode.LoadConst(lval.field));
 			JvmType.Function getFunType = new JvmType.Function(JAVA_LANG_OBJECT, WHILEYRECORD, JAVA_LANG_STRING);
 			context.add(new Bytecode.Invoke(WHILEYRECORD, "internal_get", getFunType, Bytecode.InvokeMode.STATIC));
-			context.addReadConversion(type.field(lval.field));
+			context.addReadConversion(type.getWriteableFieldType(lval.field));
 			translateUpdate(iterator, rhs, context);
 			context.add(new Bytecode.LoadConst(lval.field));
 			context.add(new Bytecode.Swap());
@@ -742,8 +744,8 @@ public class Wyil2JavaBuilder implements Build.Task {
 			// read of the current value and, instead, just return the rhs value
 			// directly.
 			context.add(new Bytecode.LoadConst(lval.field));
-			context.add(new Bytecode.Load(rhs, toJvmType(type.field(lval.field))));
-			context.addWriteConversion(type.field(lval.field));
+			context.add(new Bytecode.Load(rhs, toJvmType(type.getReadableFieldType(lval.field))));
+			context.addWriteConversion(type.getWriteableFieldType(lval.field));
 		}
 		JvmType.Function putFunType = new JvmType.Function(WHILEYRECORD, WHILEYRECORD, JAVA_LANG_STRING,
 				JAVA_LANG_OBJECT);
@@ -774,13 +776,13 @@ public class Wyil2JavaBuilder implements Build.Task {
 	private void translateBreak(Location<Break> c, Context context) {
 		context.add(new Bytecode.Goto(context.getBreakLabel()));
 	}
-	
+
 	private void translateContinue(Location<Continue> c, Context context) {
 		context.add(new Bytecode.Goto(context.getContinueLabel()));
 	}
-	
+
 	private void translateDebug(Location<Debug> c, Context context) {
-		JvmType.Function ftype = new JvmType.Function(T_VOID, WHILEYARRAY);
+		JvmType.Function ftype = new JvmType.Function(VOID, WHILEYARRAY);
 		translateExpression(c.getOperand(0), context);
 		context.add(new Bytecode.Invoke(WHILEYUTIL, "print", ftype, Bytecode.InvokeMode.STATIC));
 	}
@@ -801,7 +803,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		context.add(new Bytecode.New(JAVA_LANG_RUNTIMEEXCEPTION));
 		context.add(new Bytecode.Dup(JAVA_LANG_RUNTIMEEXCEPTION));
 		context.add(new Bytecode.LoadConst("runtime fault encountered"));
-		JvmType.Function ftype = new JvmType.Function(T_VOID, JAVA_LANG_STRING);
+		JvmType.Function ftype = new JvmType.Function(VOID, JAVA_LANG_STRING);
 		context.add(new Bytecode.Invoke(JAVA_LANG_RUNTIMEEXCEPTION, "<init>", ftype, Bytecode.InvokeMode.SPECIAL));
 		context.add(new Bytecode.Throw());
 	}
@@ -851,7 +853,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			// because Java doesn't support multiple return values.
 			int freeRegister = getFirstFreeRegister(c.getEnclosingTree());
 			translateExpressionsToArray(operands, freeRegister, context);
-			rt = JAVA_LANG_OBJECT_ARRAY;			
+			rt = JAVA_LANG_OBJECT_ARRAY;
 		}
 		// Done
 		context.add(new Bytecode.Return(rt));
@@ -860,7 +862,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	private void translateSkip(Location<Skip> code, Context context) {
 		context.add(new Bytecode.Nop()); // easy
 	}
-	
+
 	private void translateSwitch(Location<Switch> code, Context context) {
 		String exitLabel = freshLabel();
 		Location<?> condition = code.getOperand(0);
@@ -890,7 +892,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 				for (Constant value : values) {
 					translateConstant(value, context);
 					context.add(new Bytecode.Load(condition.getIndex(), type));
-					JvmType.Function ftype = new JvmType.Function(T_BOOL, JAVA_LANG_OBJECT, JAVA_LANG_OBJECT);
+					JvmType.Function ftype = new JvmType.Function(BOOL, JAVA_LANG_OBJECT, JAVA_LANG_OBJECT);
 					context.add(new Bytecode.Invoke(WHILEYUTIL, "equals", ftype, Bytecode.InvokeMode.STATIC));
 					context.add(new Bytecode.If(Bytecode.IfMode.NE, caseLabel));
 				}
@@ -915,7 +917,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	private void translateNamedBlock(Location<NamedBlock> c, Context context) {
 		translateBlock(c.getBlock(0),context);
 	}
-	
+
 	private void translateWhile(Location<While> c, Context context) {
 		// Allocate header label for loop
 		String headerLabel = freshLabel();
@@ -933,23 +935,23 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	private void translateInvokeAsStmt(Location<?> stmt, Context context) {
 		// First, translate the invocation
-		List<Type> returns;		
+		List<Type> returns;
 		if(stmt.getOpcode() == OPCODE_invoke) {
-			Location<Invoke> e = (Location<Invoke>) stmt; 			
+			Location<Invoke> e = (Location<Invoke>) stmt;
 			translateInvoke(e, context);
 			returns = e.getBytecode().type().returns();
-		} else {			
+		} else {
 			Location<IndirectInvoke> e = (Location<IndirectInvoke>) stmt;
 			translateIndirectInvoke(e, context);
 			returns = e.getBytecode().type().returns();
-		}		
-		// Second, if there are results, pop them off the stack		
+		}
+		// Second, if there are results, pop them off the stack
 		for(int i=0;i!=returns.size();++i) {
 			JvmType returnType = context.toJvmType(returns.get(i));
 			context.add(new Bytecode.Pop(returnType));
-		} 
+		}
 	}
-	
+
 	private void translateVariableDeclaration(Location<VariableDeclaration> code, Context context) {
 		if(code.numberOfOperands() > 0) {
 			JvmType type = context.toJvmType(code.getType());
@@ -957,7 +959,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			context.add(new Bytecode.Store(code.getIndex(),type));
 		}
 	}
-	
+
 	// ===============================================================================
 	// LVals
 	// ===============================================================================
@@ -967,7 +969,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * of an assignment. Each LVal provides a simple "path" representation of
 	 * the left-hand side with which we can more easily generate code for
 	 * implement the update.
-	 * 
+	 *
 	 * @param lval
 	 *            LVal operand to translate
 	 * @param context
@@ -989,12 +991,12 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * This only applies to array lvals, as these have operands which need to be
 	 * evaluated.
 	 * </p>
-	 * 
+	 *
 	 * <p>
 	 * <b>NOTE:</b> For simplicity, we just load any lval operands into their
 	 * corresponding bytecode registers.
 	 * </p>
-	 * 
+	 *
 	 * @param lval
 	 * @param context
 	 */
@@ -1012,7 +1014,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * Generate an LVal expression from the left-hand side of an assignment. An
 	 * LVal expression is basically just a path representation of the lhs
 	 * expression.
-	 * 
+	 *
 	 * @param lval
 	 *            LVal operand to translate
 	 * @param context
@@ -1117,12 +1119,12 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * continue to next logical instruction if null. If not, branch to the given
 	 * false label, or continue to next logical instruction if null.
 	 * </p>
-	 * 
+	 *
 	 * <p>
 	 * <b>NOTE:</b> Exactly one of trueLabel or falseLabel must be null to
 	 * represent the fall-thru case.
 	 * </p>
-	 * 
+	 *
 	 * @param condition
 	 *            Operand to evaluate to see whether it is true or false
 	 * @param trueLabel
@@ -1139,17 +1141,17 @@ public class Wyil2JavaBuilder implements Build.Task {
 		// First, handle the special cases as necessar.
 		switch (condition.getOpcode()) {
 		case OPCODE_logicalnot:
-			translateNotCondition((Location<Operator>) condition, trueLabel, falseLabel, enclosing);
+			translateNotCondition(condition, trueLabel, falseLabel, enclosing);
 			return;
 		case OPCODE_logicaland:
-			translateShortcircuitAndCondition((Location<Operator>) condition, trueLabel, falseLabel, enclosing);
+			translateShortcircuitAndCondition(condition, trueLabel, falseLabel, enclosing);
 			return;
 		case OPCODE_logicalor:
-			translateShortcircuitOrCondition((Location<Operator>) condition, trueLabel, falseLabel, enclosing);
+			translateShortcircuitOrCondition(condition, trueLabel, falseLabel, enclosing);
 			return;
 		case OPCODE_all:
 		case OPCODE_some:
-			translateQuantifierCondition((Location<Quantifier>) condition, trueLabel, falseLabel, enclosing);
+			translateQuantifierCondition(condition, trueLabel, falseLabel, enclosing);
 			return;
 		case OPCODE_is:
 			translateIsCondition((Location<Operator>) condition, trueLabel, falseLabel, enclosing);
@@ -1161,7 +1163,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		// branch from that.
 		translateExpression(condition, enclosing);
 		// Now, dig a true boolean about of the WyBool object
-		JvmType.Function ft = new JvmType.Function(JvmTypes.T_BOOL);
+		JvmType.Function ft = new JvmType.Function(JvmTypes.BOOL);
 		enclosing.add(new Bytecode.Invoke(WHILEYBOOL, "value", ft, Bytecode.InvokeMode.VIRTUAL));
 		// Finally, branch as necessary
 		if (trueLabel == null) {
@@ -1173,7 +1175,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Translate a logical not condition.
-	 * 
+	 *
 	 * @param condition
 	 *            Operand to evaluate to see whether it is true or false
 	 * @param trueLabel
@@ -1195,7 +1197,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Translate a logical and condition with short circuiting semantics.
-	 * 
+	 *
 	 * @param condition
 	 *            Operand to evaluate to see whether it is true or false
 	 * @param trueLabel
@@ -1224,7 +1226,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Translate a logical or condition with short circuiting semantics.
-	 * 
+	 *
 	 * @param condition
 	 *            Operand to evaluate to see whether it is true or false
 	 * @param trueLabel
@@ -1256,7 +1258,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	/**
 	 * Translate a quantifier condition into a set of nested loops with the
 	 * condition itself located in the innermost position.
-	 * 
+	 *
 	 * @param condition
 	 *            Operand to evaluate to see whether it is true or false
 	 * @param trueLabel
@@ -1301,7 +1303,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * each range translating them one at a time into an enclosing loop. When
 	 * the innermost loop body is reached, we can then evaluate the condition
 	 * for the given range positions.
-	 * 
+	 *
 	 * @param index
 	 *            Index into quantifier ranges. If matches number of ranges,
 	 *            then innermost position is reached.
@@ -1321,7 +1323,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			String falseLabel, Context context) {
 		if (index == condition.numberOfOperandGroups()) {
 			// This is the innermost case. At this point, we are in the body of
-			// the innermost loop.  First, determine what is true and false :) 
+			// the innermost loop.  First, determine what is true and false :)
 			String myTrueLabel = null;
 			String myFalseLabel = null;
 			switch(condition.getOpcode()) {
@@ -1358,7 +1360,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			context.add(new Bytecode.Load(end.getIndex(),WHILEYINT));
 			JvmType.Function ftype = new JvmType.Function(WHILEYBOOL, JAVA_LANG_OBJECT, JAVA_LANG_OBJECT);
 			context.add(new Bytecode.Invoke(WHILEYUTIL, "equal", ftype, Bytecode.InvokeMode.STATIC));
-			ftype = new JvmType.Function(JvmTypes.T_BOOL);
+			ftype = new JvmType.Function(JvmTypes.BOOL);
 			context.add(new Bytecode.Invoke(WHILEYBOOL, "value", ftype, Bytecode.InvokeMode.VIRTUAL));
 			context.add(new Bytecode.If(Bytecode.IfMode.NE, exitLabel));
 			// Recursively translate remainder of quantifier
@@ -1374,12 +1376,12 @@ public class Wyil2JavaBuilder implements Build.Task {
 			context.add(new Bytecode.Label(exitLabel));
 		}
 	}
-	
+
 	/**
 	 * Translate a type test condition. This is done here to ensure that we cast
 	 * the type appropriately before moving on to the true/false branches. For
 	 * example:
-	 * 
+	 *
 	 * <pre>
 	 * function f(int|null x) -> (int r):
 	 *     if x is int:
@@ -1387,10 +1389,10 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 *     else:
 	 *         return 0
 	 * </pre>
-	 * 
+	 *
 	 * In this case, the type of <code>x</code> will be <code>Object</code>, and
 	 * it must be cast to <code>int</code> on the true branch of the type test.
-	 * 
+	 *
 	 * @param condition
 	 *            Type test to evaluate to see whether it is true or false
 	 * @param trueLabel
@@ -1414,19 +1416,19 @@ public class Wyil2JavaBuilder implements Build.Task {
 		context.add(new Bytecode.Swap());
 		context.add(new Bytecode.Invoke(WHILEYTYPE, "is", ftype, Bytecode.InvokeMode.VIRTUAL));
 		// Add the necessary branching instruction
-		JvmType.Function ft = new JvmType.Function(JvmTypes.T_BOOL);
+		JvmType.Function ft = new JvmType.Function(JvmTypes.BOOL);
 		context.add(new Bytecode.Invoke(WHILEYBOOL, "value", ft, Bytecode.InvokeMode.VIRTUAL));
 		// Determine the appropriate types for the true and false branches
 		Pair<Type,Type> flowTypes = determineFlowTypes(test,context);
 		// Add the necessary branch
 		if(flowTypes == null) {
 			// FIXME: bug here in case where constrained type is being tested
-			
+
 			// In this case, no retyping is possible. Therefore, we branch
 			// directly to the relevant destination.
 			if(trueLabel == null) {
 				context.add(new Bytecode.If(Bytecode.IfMode.EQ, falseLabel));
-			} else {		
+			} else {
 				context.add(new Bytecode.If(Bytecode.IfMode.NE, trueLabel));
 			}
 		} else {
@@ -1436,7 +1438,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			Location<VariableDeclaration> decl = getVariableDeclaration(lhs);
 			String tmpFalseLabel = freshLabel();
 			String tmpTrueLabel = freshLabel();
-			if(trueLabel == null) {		
+			if(trueLabel == null) {
 				context.add(new Bytecode.If(Bytecode.IfMode.NE, tmpTrueLabel));
 				context.add(new Bytecode.Label(tmpFalseLabel));
 				// This is the false branch. Apply the necessary cast.
@@ -1471,30 +1473,30 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 *
 	 * <pre>
 	 *	 type nat is (int n) where n >= 0
-	 *	
+	 *
 	 *	 function f(int|bool|null x) -> bool:
 	 *	 if x is nat|bool:
 	 *	 ...
 	 *	 else:
 	 *	 ...
 	 * </pre>
-	 * 
-	 * 
+	 *
+	 *
 	 * Here, the type of x on the true branch is int|bool, whilst on the false
 	 * branch it is int|null. To correctly handle this, we need to determine
 	 * maximal type which is fully consumed by another. In this case, the
 	 * maximal type fully consumed by nat|bool is bool and, hence, the type on
 	 * the false branch is int|bool|null - bool == int|null.
-	 * 
+	 *
 	 * @param test
 	 * @param enclosing
 	 * @return
 	 */
 	private Pair<Type, Type> determineFlowTypes(Location<Operator> test, Context enclosing) {
 		Location<?> lhs = test.getOperand(0);
-		Location<Const> rhs = (Location<Const>) test.getOperand(1);		
-		
-		if(lhs.getBytecode() instanceof VariableAccess) {					
+		Location<Const> rhs = (Location<Const>) test.getOperand(1);
+
+		if(lhs.getBytecode() instanceof VariableAccess) {
 			Type maximalConsumedType;
 			Type expandedLhsType;
 			Type expandedRhsType;
@@ -1517,11 +1519,11 @@ public class Wyil2JavaBuilder implements Build.Task {
 			return null;
 		}
 	}
-	
+
 	/**
 	 * Retype a given variable. This is done by casting the variable into the
 	 * appropriate type and assigning this over the original value.
-	 * 
+	 *
 	 * @param location
 	 *            Variable to be retyped.
 	 * @param type
@@ -1535,12 +1537,12 @@ public class Wyil2JavaBuilder implements Build.Task {
 		enclosing.addReadConversion(type);
 		enclosing.add(new Bytecode.Store(decl.getIndex(), toJvmType(type)));
 	}
-	
+
 	/**
 	 * Translate any invariants contained in a given type. In the case the
 	 * invariant doesn't hold, we dispatch to a given false destination.
 	 * Otherwise, we fall through to the following instruction.
-	 * 
+	 *
 	 * @param falseTarget
 	 *            Destination to branch if invariant is false
 	 * @param type
@@ -1640,7 +1642,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * List or Set). This code will not leave anything on the stack and will
 	 * store the iterator variable in a given slot. This means that things can
 	 * be passed on the stack from before the loop into the loop body.
-	 * 
+	 *
 	 * @param freeSlot
 	 *            The variable slot into which the iterator variable should be
 	 *            stored.
@@ -1668,7 +1670,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		context.add(new Bytecode.Label(loopHeader));
 		context.add(new Bytecode.Load(freeSlot, JAVA_UTIL_ITERATOR));
 		context.add(new Bytecode.Invoke(JAVA_UTIL_ITERATOR, "hasNext",
-				new JvmType.Function(T_BOOL), Bytecode.InvokeMode.INTERFACE));
+				new JvmType.Function(BOOL), Bytecode.InvokeMode.INTERFACE));
 		context.add(new Bytecode.If(Bytecode.IfMode.EQ, loopExit));
 
 		// Finally, get the current element out of the iterator by invoking
@@ -1687,12 +1689,12 @@ public class Wyil2JavaBuilder implements Build.Task {
 		context.add(new Bytecode.Goto(labels.first()));
 		context.add(new Bytecode.Label(labels.third()));
 	}
-	
+
 	/**
 	 * The purpose of this method is to translate a type test. We're testing to
 	 * see whether what's on the top of the stack (the value) is a subtype of
 	 * the type being tested. Note, constants must be provided as a parameter
-	 * 
+	 *
 	 * @param falseLabel
 	 *            Destination to branch if not true
 	 * @param type
@@ -1720,7 +1722,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			JvmType.Function ftype = new JvmType.Function(WHILEYBOOL, JAVA_LANG_OBJECT);
 			context.add(new Bytecode.Swap());
 			context.add(new Bytecode.Invoke(WHILEYTYPE, "is", ftype, Bytecode.InvokeMode.VIRTUAL));
-			JvmType.Function ft = new JvmType.Function(JvmTypes.T_BOOL);
+			JvmType.Function ft = new JvmType.Function(JvmTypes.BOOL);
 			context.add(new Bytecode.Invoke(WHILEYBOOL, "value", ft, Bytecode.InvokeMode.VIRTUAL));
 			context.add(new Bytecode.If(Bytecode.IfMode.EQ, falseLabel));
 		}
@@ -1735,7 +1737,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * the others. Likewise, the results are pushed on the stack in the order of
 	 * operands given. So, the result of the first operand is pushed onto the
 	 * stack first, etc.
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param enclosing
@@ -1758,14 +1760,14 @@ public class Wyil2JavaBuilder implements Build.Task {
 		}
 		return types;
 	}
-	
+
 	/**
 	 * Translate one or more operands into JVM Bytecodes and store them in an
 	 * object array. Execution follows the order of operands given, with the
 	 * first operand being evaluated before the others. Likewise, the results
 	 * are pushed on the stack in the order of operands given. So, the result of
 	 * the first operand is pushed onto the stack first, etc.
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param freeRegister
@@ -1811,11 +1813,11 @@ public class Wyil2JavaBuilder implements Build.Task {
 		}
 		return count;
 	}
-	
+
 	/**
 	 * Translate an operand into one or more JVM Bytecodes. The result of this
 	 * operand will be pushed onto the stack at the end.
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param enclosing
@@ -1850,8 +1852,8 @@ public class Wyil2JavaBuilder implements Build.Task {
 			case OPCODE_varaccess:
 				translateVariableAccess((Location<VariableAccess>) expr, context);
 				break;
-			default:				
-				translateOperator((Location<Operator>) expr, context);				
+			default:
+				translateOperator((Location<Operator>) expr, context);
 			}
 		} catch(InternalFailure ex) {
 			throw ex;
@@ -1869,7 +1871,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * constant is encountered, we create the constants in the static
 	 * initialiser of this class, and store them in static fields for later
 	 * recall.
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param enclosing
@@ -1881,7 +1883,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		// At this point, we need to normalise the constant. This is because the
 		// constant may involve one or more nominal types. These types don't
 		// make sense at runtime, and we want to get rid of them where possible.
-		constant = normalise(constant);		
+		constant = normalise(constant);
 		JvmType jt = toJvmType(constant.type());
 		// Check whether this constant can be translated as a primitive, and
 		// encoded directly within a bytecode.
@@ -1902,26 +1904,26 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * Make sure any type constants are fully expanded. This is to ensure that
 	 * nominal types are not present at runtime (unless they are specifically
 	 * protected in some way).
-	 * 
+	 *
 	 * @param constant
 	 * @return
 	 */
-	private Constant normalise(Constant constant) throws ResolveError {		
+	private Constant normalise(Constant constant) throws ResolveError {
 		if(constant instanceof Constant.Type) {
 			Constant.Type ct = (Constant.Type) constant;
 			Type type = ct.value();
-			Type underlyingType;			
-			underlyingType = typeSystem.getUnderlyingType(type);			
+			Type underlyingType;
+			underlyingType = typeSystem.getUnderlyingType(type);
 			return new Constant.Type(underlyingType);
 		} else {
 			return constant;
-		}		
+		}
 	}
-	
+
 	/**
 	 * Coerce one data value into another. In what situations do we actually
 	 * have to do work?
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param enclosing
@@ -1936,7 +1938,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Load the value of a given field from a record.
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param enclosing
@@ -1958,7 +1960,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Apply a unary, binary or ternary operator to a given set of operands.
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param enclosing
@@ -1980,7 +1982,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		case OPCODE_array:
 			translateArrayConstructor(c, context);
 			break;
-		default:			
+		default:
 			translateExpressions(c.getOperands(), context);
 			// Second, dispatch to a specific translator for this opcode kind.
 			generators[c.getOpcode()].translate(c, context);
@@ -1997,10 +1999,10 @@ public class Wyil2JavaBuilder implements Build.Task {
 		context.add(new Bytecode.GetField(WHILEYBOOL, "TRUE", WHILEYBOOL, Bytecode.FieldMode.STATIC));
 		context.add(new Bytecode.Label(exitLabel));
 	}
-	
+
 	/**
 	 * Translate a RecordConstructor operand.
-	 * 
+	 *
 	 * @param bytecode
 	 * @param context
 	 */
@@ -2024,7 +2026,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Translate an ArrayConstructor operand
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param enclosing
@@ -2033,7 +2035,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 */
 	private void translateArrayConstructor(Location<Operator> code, Context context) throws ResolveError {
 		Type.EffectiveArray arrType = typeSystem.expandAsEffectiveArray(code.getType());
-		JvmType.Function initJvmType = new JvmType.Function(T_VOID, T_INT);
+		JvmType.Function initJvmType = new JvmType.Function(VOID, INT);
 		JvmType.Function ftype = new JvmType.Function(WHILEYARRAY, WHILEYARRAY, JAVA_LANG_OBJECT);
 
 		context.add(new Bytecode.New(WHILEYARRAY));
@@ -2054,7 +2056,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * contains as fields any local variables from the current method/function
 	 * which are accessed within the body of the lambda (the so-called
 	 * "binding").
-	 * 
+	 *
 	 * @param c
 	 * @param context
 	 */
@@ -2074,7 +2076,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			Location<?> e = environment[i];
 			context.add(new Bytecode.Load(e.getIndex(), jvmEnvironment[i]));
 		}
-		JvmType.Function ftype = new JvmType.Function(T_VOID, jvmEnvironment);
+		JvmType.Function ftype = new JvmType.Function(VOID, jvmEnvironment);
 		context.add(new Bytecode.Invoke(lambda.type(), "<init>", ftype, Bytecode.InvokeMode.SPECIAL));
 
 		// Second, we translate the body of the lambda and construct a new
@@ -2087,7 +2089,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Perform a direct method or function invocation.
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param enclosing
@@ -2100,7 +2102,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		translateExpressions(c.getOperands(), context);
 		// Construct the invocation bytecode
 		context.add(createMethodInvocation(bytecode.name(), bytecode.type()));
-		// 
+		//
 		List<Type> returnTypes = bytecode.type().returns();
 		if(returnTypes.size() > 1) {
 			decodeOperandArray(returnTypes,context);
@@ -2109,7 +2111,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Perform an indirect method or function invocation.
-	 * 
+	 *
 	 * @param code
 	 *            The WyIL operand being translated.
 	 * @param enclosing
@@ -2144,9 +2146,9 @@ public class Wyil2JavaBuilder implements Build.Task {
 	/**
 	 * Translate a quantifier into a set of nested loops with the condition
 	 * itself located in the innermost position.
-	 * 
+	 *
 	 * @param condition
-	 *            Operand to evaluate to see whether it is true or false 
+	 *            Operand to evaluate to see whether it is true or false
 	 * @param enclosing
 	 *            Enclosing context
 	 */
@@ -2160,21 +2162,21 @@ public class Wyil2JavaBuilder implements Build.Task {
 		context.add(new Bytecode.GetField(WHILEYBOOL, "TRUE", WHILEYBOOL, Bytecode.FieldMode.STATIC));
 		context.add(new Bytecode.Label(exitLabel));
 	}
-	
+
 	/**
 	 * Translate a variable access into a simple variable load instruction
-	 * 
+	 *
 	 * @param condition
 	 *            Operand to evaluate to see whether it is true or false
 	 * @param enclosing
 	 *            Enclosing context
 	 */
-	private void translateVariableAccess(Location<VariableAccess> expr, Context context) {		
+	private void translateVariableAccess(Location<VariableAccess> expr, Context context) {
 		JvmType type = context.toJvmType(expr.getType());
 		Location<VariableDeclaration> decl = getVariableDeclaration(expr);
 		context.add(new Bytecode.Load(decl.getIndex(), type));
 	}
-		
+
 	// ===============================================================================
 	// Constants
 	// ===============================================================================
@@ -2184,7 +2186,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * translations are more expensive that others. Primitive types (e.g. null,
 	 * bool, integer) can be loaded directly. Others require constructing
 	 * objects and should, ideally, be done only once.
-	 * 
+	 *
 	 * @param v
 	 * @param context
 	 */
@@ -2218,7 +2220,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	protected void translateConstant(Constant.Bool e, Context context) {
 		context.add(new Bytecode.LoadConst(e.value()));
-		JvmType.Function ftype = new JvmType.Function(WHILEYBOOL, T_BOOL);
+		JvmType.Function ftype = new JvmType.Function(WHILEYBOOL, BOOL);
 		context.add(new Bytecode.Invoke(WHILEYBOOL, "valueOf", ftype, Bytecode.InvokeMode.STATIC));
 	}
 
@@ -2240,7 +2242,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	protected void translateConstant(Constant.Byte e, Context context) {
 		context.add(new Bytecode.LoadConst(e.value()));
-		JvmType.Function ftype = new JvmType.Function(WHILEYBYTE, T_BYTE);
+		JvmType.Function ftype = new JvmType.Function(WHILEYBYTE, BYTE);
 		context.add(new Bytecode.Invoke(WHILEYBYTE, "valueOf", ftype, Bytecode.InvokeMode.STATIC));
 	}
 
@@ -2249,18 +2251,18 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 		if (num.bitLength() < 32) {
 			context.add(new Bytecode.LoadConst(num.intValue()));
-			context.add(new Bytecode.Conversion(T_INT, T_LONG));
-			JvmType.Function ftype = new JvmType.Function(WHILEYINT, T_LONG);
+			context.add(new Bytecode.Conversion(INT, LONG));
+			JvmType.Function ftype = new JvmType.Function(WHILEYINT, LONG);
 			context.add(new Bytecode.Invoke(WHILEYINT, "valueOf", ftype, Bytecode.InvokeMode.STATIC));
 		} else if (num.bitLength() < 64) {
 			context.add(new Bytecode.LoadConst(num.longValue()));
-			JvmType.Function ftype = new JvmType.Function(WHILEYINT, T_LONG);
+			JvmType.Function ftype = new JvmType.Function(WHILEYINT, LONG);
 			context.add(new Bytecode.Invoke(WHILEYINT, "valueOf", ftype, Bytecode.InvokeMode.STATIC));
 		} else {
 			// in this context, we need to use a byte array to construct the
 			// integer object.
 			byte[] bytes = num.toByteArray();
-			JvmType.Array bat = new JvmType.Array(JvmTypes.T_BYTE);
+			JvmType.Array bat = new JvmType.Array(JvmTypes.BYTE);
 
 			context.add(new Bytecode.New(WHILEYINT));
 			context.add(new Bytecode.Dup(WHILEYINT));
@@ -2273,7 +2275,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 				context.add(new Bytecode.ArrayStore(bat));
 			}
 
-			JvmType.Function ftype = new JvmType.Function(T_VOID, bat);
+			JvmType.Function ftype = new JvmType.Function(VOID, bat);
 			context.add(new Bytecode.Invoke(WHILEYINT, "<init>", ftype, Bytecode.InvokeMode.SPECIAL));
 		}
 
@@ -2283,16 +2285,16 @@ public class Wyil2JavaBuilder implements Build.Task {
 		context.add(new Bytecode.New(WHILEYARRAY));
 		context.add(new Bytecode.Dup(WHILEYARRAY));
 		context.add(new Bytecode.LoadConst(lv.values().size()));
-		JvmType.Function ftype = new JvmType.Function(T_VOID, T_INT);
+		JvmType.Function ftype = new JvmType.Function(VOID, INT);
 		context.add(new Bytecode.Invoke(WHILEYARRAY, "<init>", ftype, Bytecode.InvokeMode.SPECIAL));
 
-		ftype = new JvmType.Function(T_BOOL, JAVA_LANG_OBJECT);
+		ftype = new JvmType.Function(BOOL, JAVA_LANG_OBJECT);
 		for (Constant e : lv.values()) {
 			context.add(new Bytecode.Dup(WHILEYARRAY));
 			translateConstant(e, context);
 			context.addWriteConversion(e.type());
 			context.add(new Bytecode.Invoke(WHILEYARRAY, "add", ftype, Bytecode.InvokeMode.VIRTUAL));
-			context.add(new Bytecode.Pop(T_BOOL));
+			context.add(new Bytecode.Pop(BOOL));
 		}
 	}
 
@@ -2336,7 +2338,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * method like this is not necessarily optimal, but it allows me to simplify
 	 * the translation process (e.g. as locations still correspond to register
 	 * numbers, etc).
-	 * 
+	 *
 	 * @param type
 	 * @param lambdaMethod
 	 * @param context
@@ -2372,7 +2374,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	/**
 	 * Shift the parameters passed into this lambda method into the desired
 	 * target registers.
-	 * 
+	 *
 	 * @param parameters
 	 *            Actual parameter of the lambda itself
 	 * @param environment
@@ -2398,12 +2400,12 @@ public class Wyil2JavaBuilder implements Build.Task {
 			}
 		}
 	}
-	
+
 	/**
 	 * Construct the true method type for a lambda body. This is the type of the
 	 * lambda itself, along with the types for any environment variables which
 	 * are required.
-	 * 
+	 *
 	 * @param type
 	 * @param environment
 	 * @param context
@@ -2419,10 +2421,10 @@ public class Wyil2JavaBuilder implements Build.Task {
 		//
 		return new JvmType.Function(jvmType.returnType(), actualParameterTypes);
 	}
-	
+
 	/**
 	 * Determine the types for the environment variables of a lambda expression.
-	 * 
+	 *
 	 * @param environment
 	 * @param context
 	 * @return
@@ -2435,7 +2437,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		}
 		return envTypes;
 	}
-	
+
 	public ClassFile buildLambda(JvmType.Clazz targetClass, String targetMethod, Type.FunctionOrMethod type,
 			JvmType... environment) {
 		int lambda_id = lambdaClasses.size();
@@ -2447,7 +2449,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		String targetMethodMangled = nameMangle(targetMethod, type);
 		// Determine JvmType of function or method
 		JvmType.Function jvmType = convertFunType(type);
-		// Determine the Jvm types for the environment		
+		// Determine the Jvm types for the environment
 		// Create the lambda template
 		LambdaTemplate template = new LambdaTemplate(CLASS_VERSION, lambdaClass, targetClass, targetMethodMangled,
 				jvmType, environment);
@@ -2472,11 +2474,11 @@ public class Wyil2JavaBuilder implements Build.Task {
 			throw new RuntimeException("internal failure --- dead code reached");
 		}
 	}
-	
+
 	/**
 	 * Create an invocation bytecode for a given WyIL function or method. This
 	 * is just a convenience method which takes care of name mangling, etc.
-	 * 
+	 *
 	 * @param name
 	 *            Name and module of function or method to be invoked
 	 * @param type
@@ -2498,7 +2500,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * Given an object array on the stack, take everything out of it an leave it
 	 * on the stack. This is needed to help handle multiple returns which are
 	 * packaged into object arrays.
-	 * 
+	 *
 	 * @param types
 	 *            The list of types which are stored in the object array
 	 * @param context
@@ -2512,8 +2514,8 @@ public class Wyil2JavaBuilder implements Build.Task {
 			context.addReadConversion(type);
 			// At this point, we have the value on top of the stack and then the
 			// array reference. So, we can just swap them to get the desired
-			// order. 
-			context.add(new Bytecode.Swap());			
+			// order.
+			context.add(new Bytecode.Swap());
 		}
 		context.add(new Bytecode.Pop(JAVA_LANG_OBJECT_ARRAY));
 	}
@@ -2569,7 +2571,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	/**
 	 * Convert a given WyIL type into a JVM type by expanding it into its
 	 * underlying form as far as possible.
-	 * 
+	 *
 	 * @param t
 	 *            the type to be expanded.
 	 * @return
@@ -2634,7 +2636,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Get the JvmType.Clazz associated with a given WyIL module.
-	 * 
+	 *
 	 * @param mid
 	 * @return
 	 */
@@ -2645,7 +2647,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	/**
 	 * Construct a list of modifiers from an array of (potentially null)
 	 * modifiers.
-	 * 
+	 *
 	 * @param mods
 	 * @return
 	 */
@@ -2683,11 +2685,11 @@ public class Wyil2JavaBuilder implements Build.Task {
 	}
 
 	private static <T> T[] append(T[] lhs, T... rhs) {
-		T[] noperands = Arrays.copyOf(lhs,lhs.length+rhs.length);		
+		T[] noperands = Arrays.copyOf(lhs,lhs.length+rhs.length);
 		System.arraycopy(rhs, 0, noperands, lhs.length, rhs.length);
 		return noperands;
 	}
-	
+
 	private static int getFirstFreeRegister(SyntaxTree tree) {
 		return tree.getLocations().size();
 	}
@@ -2696,7 +2698,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 * A constant is some kind of auxillary functionality used in generated
 	 * code, which can be reused at multiple sites. This includes value
 	 * constants, and coercion functions.
-	 * 
+	 *
 	 * @author David J. Pearce
 	 *
 	 */
@@ -2710,6 +2712,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			value = v;
 		}
 
+		@Override
 		public boolean equals(Object o) {
 			if (o instanceof JvmValue) {
 				JvmValue vc = (JvmValue) o;
@@ -2718,6 +2721,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			return false;
 		}
 
+		@Override
 		public int hashCode() {
 			return value.hashCode();
 		}
@@ -2745,7 +2749,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		 * Determine the branch target for a break statement
 		 */
 		private final String breakLabel;
-		
+
 		/**
 		 * Determine the branch target for a continue statement
 		 */
@@ -2760,7 +2764,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			this.breakLabel = breakLabel;
 			this.continueLabel = continueLabel;
 		}
-	
+
 		public List<Bytecode> getBytecodes() {
 			return bytecodes;
 		}
@@ -2772,7 +2776,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		public String getContinueLabel() {
 			return continueLabel;
 		}
-		
+
 		public Context newLoopBlock(String breakLabel, String continueLabel) {
 			return new Context(bytecodes, breakLabel, continueLabel);
 		}
@@ -2787,7 +2791,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			// This currently does nothing since there are currently no data types
 			// implemented as primitives.
 		}
-		
+
 		/**
 		 * The read conversion is necessary in situations where we're reading a
 		 * value from a collection (e.g. WhileyList, WhileySet, etc) and then
@@ -2799,7 +2803,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			// types implemented as primitives.
 			addCheckCast(toJvmType(type));
 		}
-		
+
 		private void addCheckCast(JvmType type) {
 			// The following can happen in situations where a variable has type
 			// void. In principle, we could remove this as obvious dead-code, but
@@ -2811,7 +2815,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 				add(new Bytecode.CheckCast(type));
 			}
 		}
-		
+
 		/**
 		 * The construct method provides a generic way to construct a Java object.
 		 *
@@ -2830,7 +2834,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		public JvmType toJvmType(Type type) {
 			return Wyil2JavaBuilder.this.toJvmType(type);
 		}
-		
+
 		public Type.EffectiveArray expandAsEffectiveArray(Type type) throws ResolveError {
 			return typeSystem.expandAsEffectiveArray(type);
 		}
@@ -2850,7 +2854,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	/**
 	 * Provides a simple interface for translating individual bytecodes.
-	 * 
+	 *
 	 * @author David J. Pearce
 	 *
 	 */

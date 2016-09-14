@@ -31,21 +31,21 @@ import java.util.*;
 
 import wyfs.io.BinaryInputStream;
 import wyjc.util.JavaIdentifierInputStream;
-import static wyil.lang.Type.K_VOID;
-import static wyil.lang.Type.K_ANY;
-import static wyil.lang.Type.K_META;
-import static wyil.lang.Type.K_NULL;
-import static wyil.lang.Type.K_BOOL;
-import static wyil.lang.Type.K_BYTE;
-import static wyil.lang.Type.K_INT;
-import static wyil.lang.Type.K_LIST;
-import static wyil.lang.Type.K_REFERENCE;
-import static wyil.lang.Type.K_RECORD;
-import static wyil.lang.Type.K_UNION;
-import static wyil.lang.Type.K_NEGATION;
-import static wyil.lang.Type.K_FUNCTION;
-import static wyil.lang.Type.K_METHOD;
-import static wyil.lang.Type.K_NOMINAL;
+import static wyil.util.TypeSystem.K_VOID;
+import static wyil.util.TypeSystem.K_ANY;
+import static wyil.util.TypeSystem.K_META;
+import static wyil.util.TypeSystem.K_NULL;
+import static wyil.util.TypeSystem.K_BOOL;
+import static wyil.util.TypeSystem.K_BYTE;
+import static wyil.util.TypeSystem.K_INT;
+import static wyil.util.TypeSystem.K_LIST;
+import static wyil.util.TypeSystem.K_REFERENCE;
+import static wyil.util.TypeSystem.K_RECORD;
+import static wyil.util.TypeSystem.K_UNION;
+import static wyil.util.TypeSystem.K_NEGATION;
+import static wyil.util.TypeSystem.K_FUNCTION;
+import static wyil.util.TypeSystem.K_METHOD;
+import static wyil.util.TypeSystem.K_NOMINAL;
 
 public abstract class WyType {
 
@@ -59,9 +59,9 @@ public abstract class WyType {
 		boolean r = instanceOf(o);
 		return r ? WyBool.TRUE : WyBool.FALSE;
 	}
-	
+
 	public abstract boolean instanceOf(Object o);
-	
+
 	public static final Void VOID = new Void();
 	public static final Any ANY = new Any();
 	public static final Meta META = new Meta();
@@ -69,7 +69,7 @@ public abstract class WyType {
 	public static final Bool BOOL = new Bool();
 	public static final Byte BYTE = new Byte();
 	public static final Integer INT = new Integer();
-	
+
 	private static final class Void extends WyType {
 		Void() {
 			super(K_VOID);
@@ -290,7 +290,7 @@ public abstract class WyType {
 			return o instanceof WyLambda;
 		}
 	}
-	
+
 	public static final class Method extends WyType {
 		public final WyType[] returns;
 		public final WyType[] parameters;
@@ -306,7 +306,7 @@ public abstract class WyType {
 			return o instanceof WyLambda;
 		}
 	}
-	
+
 	public static final class Label extends WyType {
 		public final int label;
 		public Label(int label) {
@@ -353,7 +353,7 @@ public abstract class WyType {
 		case K_BOOL:
 			return BOOL;
 		case K_BYTE:
-			return BYTE;		
+			return BYTE;
 		case K_INT:
 			return INT;
 		case K_LIST: {
@@ -574,11 +574,11 @@ public abstract class WyType {
 		}
 		return type;
 	}
-	
+
 	private static String toString(WyType t) {
 		return toString(t, new HashSet<WyType>());
 	}
-	
+
 	private static String toString(WyType t, HashSet<WyType> visited) {
 		if(visited.contains(t)) {
 			return "...";
@@ -651,7 +651,7 @@ public abstract class WyType {
 
 		throw new RuntimeException("unknow type encountered (kind: " + t.kind + ")");
 	}
-	
+
 	private static String toString(WyType[] types, HashSet<WyType> visited) {
 		String r = "(";
 		for (int i = 0; i != types.length; ++i) {

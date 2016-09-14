@@ -21,31 +21,31 @@ import wyjc.Wyil2JavaBuilder;
 /**
  * This is a template for generating a "lambda class", which is used to
  * represent lambda's in Whiley. The basic form of the generated class is:
- * 
+ *
  * <pre>
  * final class NN extends WyLambda {
  *    private final T1 r1;
  *    ...
  *    private final Tn rn;
- *    
+ *
  *    public NN(T1 r1, ... Tn rn) {
  *       super();
  *       this.r1 = r1;
  *       ...
  *       this.rn = rn;
  *    }
- *    
+ *
  *    public Object call(Object... params) {
  *      return C.m(params[0], ... params[m], r1, ..., rn);
  *    }
  * }
  * </pre>
- * 
+ *
  * Here, the fields <code>r1</code> to <code>rn</code> correspond to the
  * "environment". Those are variables from the enclosing scope which are passed
  * through to the lambda body. In this case, the body always consists of a
  * static method call to a given method.
- * 
+ *
  * @author David J. Pearce
  *
  */
@@ -55,39 +55,39 @@ public class LambdaTemplate {
 	 * JVM Class version number to use (e.g. 49)
 	 */
 	private final int version;
-	
+
 	/**
 	 * The class that this template will generate
 	 */
-	private final JvmType.Clazz thisClass;	
-	
+	private final JvmType.Clazz thisClass;
+
 	/**
 	 * The enclosing class of the target method. That is the static method which
 	 * will be invoked by this lambda.
 	 */
 	private final JvmType.Clazz targetClass;
-	
+
 	/**
 	 * The name of the target method.  That is the static method which
 	 * will be invoked by this lambda.
-	 */ 
+	 */
 	private final String targetMethod;
-	
+
 	/**
 	 * The type of the target function. This excludes the "environment" which
 	 * will extend the set of concrete parameter types.
 	 */
 	private final JvmType.Function type;
-	
+
 	/**
 	 * The set of environment variables which will be stored as fields
 	 */
 	private final JvmType[] environment;
-	
+
 	/**
 	 * Create a given LambdaTemplate with which a special lambda class can be
 	 * constructed.
-	 * 
+	 *
 	 * @param version
 	 *            JVM Class version number to use (e.g. 49)
 	 * @param thisClass
@@ -115,10 +115,10 @@ public class LambdaTemplate {
 		this.type = type;
 		this.environment = environment;
 	}
-	
+
 	/**
 	 * Generate the lambda class.
-	 * 
+	 *
 	 * @return
 	 */
 	public ClassFile generateClass() {
@@ -130,7 +130,7 @@ public class LambdaTemplate {
 		for(int i=0;i!=environment.length;++i) {
 			String name = "r" + i;
 			cf.fields().add(generateField(name,environment[i]));
-		}		
+		}
 		// Add Constructor
 		cf.methods().add(generateConstructor());
 		// Add implementation of WyLambda.call(Object[]) ===
@@ -138,20 +138,20 @@ public class LambdaTemplate {
 		// Done
 		return cf;
 	}
-	
+
 
 	/**
 	 * Build a constructor for a lambda expression. This constructor accepts
 	 * zero or more parameters which constitute the "environment". That is,
 	 * variables from the enclosing scope of the lambda which will be passed
 	 * through and stored in the lambda class itself.
-	 * 
+	 *
 	 * @return
 	 */
 	private ClassFile.Method generateConstructor() {
 		List<Modifier> modifiers = modifiers(ACC_PUBLIC);
-		JvmType.Function superConstructorType = new JvmType.Function(JvmTypes.T_VOID);
-		JvmType.Function constructorType = new JvmType.Function(JvmTypes.T_VOID, environment);
+		JvmType.Function superConstructorType = new JvmType.Function(JvmTypes.VOID);
+		JvmType.Function constructorType = new JvmType.Function(JvmTypes.VOID, environment);
 		// Create constructor method
 		ClassFile.Method constructor = new ClassFile.Method("<init>", constructorType, modifiers);
 		// Create body of constructor which called super-class constructor, and
@@ -175,7 +175,7 @@ public class LambdaTemplate {
 		//
 		return constructor;
 	}
-	
+
 
 	/**
 	 * Build a method implementing the body of this lambda. In this case, the
@@ -184,12 +184,12 @@ public class LambdaTemplate {
 	 * parameters which are passed in to the call itself as an object array;
 	 * Second, the parameters originally passed to the constructor and now
 	 * stored as fields.
-	 * 
+	 *
 	 * @param lambdaClassType
 	 * @return
 	 */
 	private ClassFile.Method generateCallMethod() {
-		List<Modifier> modifiers = modifiers(ACC_PUBLIC, ACC_FINAL);		
+		List<Modifier> modifiers = modifiers(ACC_PUBLIC, ACC_FINAL);
 		// Create constructor method
 		JvmType.Function callType = new JvmType.Function(JAVA_LANG_OBJECT, JAVA_LANG_OBJECT_ARRAY);
 		ClassFile.Method method = new ClassFile.Method("call", callType, modifiers);
@@ -211,18 +211,18 @@ public class LambdaTemplate {
 			// type of WyLambda.call dictates this. Therefore, push on dummy
 			// null value.
 			bytecodes.add(new Bytecode.LoadConst(null));
-		} 
-		bytecodes.add(new Bytecode.Return(JAVA_LANG_OBJECT));		
+		}
+		bytecodes.add(new Bytecode.Return(JAVA_LANG_OBJECT));
 		// Add code attribute to call method
 		jasm.attributes.Code code = new jasm.attributes.Code(bytecodes, new ArrayList<Handler>(), method);
 		method.attributes().add(code);
 		// Done
 		return method;
 	}
-	
+
 	/**
 	 * Generate a field in which the given environment variable can be stored.
-	 * 
+	 *
 	 * @param name
 	 * @param type
 	 * @return
@@ -231,11 +231,11 @@ public class LambdaTemplate {
 		List<Modifier> modifiers = modifiers(ACC_PRIVATE, ACC_FINAL);
 		return new ClassFile.Field(name, type, modifiers);
 	}
-	
+
 	/**
 	 * Given an array of objects, load each element onto the stack in order of
 	 * occurrence and convert them into the appropriate form.
-	 * 
+	 *
 	 * @param source
 	 *            Source register containing the array
 	 * @param types
@@ -250,10 +250,10 @@ public class LambdaTemplate {
 			bytecodes.add(new Bytecode.CheckCast(types.get(i)));
 		}
 	}
-	
+
 	/**
 	 * Load each environment variable onto the stack
-	 * 
+	 *
 	 * @param bytecodes
 	 */
 	private void loadEnvironment(List<Bytecode> bytecodes) {
@@ -263,11 +263,11 @@ public class LambdaTemplate {
 			bytecodes.add(new Bytecode.GetField(thisClass, name, environment[i], Bytecode.FieldMode.NONSTATIC));
 		}
 	}
-	
+
 	/**
 	 * Construct a list of modifiers from an array of (potentially null)
 	 * modifiers.
-	 * 
+	 *
 	 * @param mods
 	 * @return
 	 */
