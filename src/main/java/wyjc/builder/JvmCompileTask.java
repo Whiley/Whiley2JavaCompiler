@@ -23,7 +23,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package wyjc;
+package wyjc.builder;
 
 import java.io.*;
 import java.math.BigInteger;
@@ -48,10 +48,10 @@ import wyil.lang.Bytecode.VariableDeclaration;
 
 import static wyil.lang.Bytecode.*;
 import wyil.util.TypeSystem;
-
+import wyil.util.type.BinaryTypeWriter;
+import wyjc.Activator;
 import wyjc.util.BytecodeTranslators;
 import wyjc.util.LambdaTemplate;
-import wyjc.util.WyjcBuildTask;
 import jasm.attributes.LineNumberTable;
 import jasm.attributes.SourceFile;
 import jasm.lang.*;
@@ -70,7 +70,7 @@ import static jasm.lang.JvmTypes.*;
  * @author David J. Pearce
  *
  */
-public class Wyil2JavaBuilder implements Build.Task {
+public class JvmCompileTask implements Build.Task {
 	private static int CLASS_VERSION = 49;
 
 	/**
@@ -126,7 +126,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 */
 	private ArrayList<LineNumberTable.Entry> lineNumbers;
 
-	public Wyil2JavaBuilder(Build.Project project) {
+	public JvmCompileTask(Build.Project project) {
 		this.project = project;
 		this.typeSystem = new TypeSystem(project);
 		this.generators = BytecodeTranslators.standardFunctions;
@@ -157,7 +157,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		for (Pair<Path.Entry<?>, Path.Root> p : delta) {
 			Path.Root dst = p.second();
 			Path.Entry<WyilFile> source = (Path.Entry<WyilFile>) p.first();
-			Path.Entry<ClassFile> target = dst.create(source.id(), WyjcBuildTask.ContentType);
+			Path.Entry<ClassFile> target = dst.create(source.id(), Activator.ContentType);
 			graph.registerDerivation(source, target);
 			generatedFiles.add(target);
 
@@ -184,7 +184,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			Path.ID pkg = parent.subpath(0, parent.size() - 1);
 			for (int i = 0; i != lambdaClasses.size(); ++i) {
 				Path.ID id = pkg.append(parent.last() + "$" + i);
-				Path.Entry<ClassFile> lf = dst.create(id, WyjcBuildTask.ContentType);
+				Path.Entry<ClassFile> lf = dst.create(id, Activator.ContentType);
 				ClassFile lc = lambdaClasses.get(i);
 				// Verify generated class file
 				new ClassFileVerifier().apply(lc);
@@ -708,7 +708,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 			context.add(new Bytecode.Load(lval.index.getIndex(), WHILEYINT));
 			JvmType.Function getFunType = new JvmType.Function(JAVA_LANG_OBJECT, WHILEYARRAY, WHILEYINT);
 			context.add(new Bytecode.Invoke(WHILEYARRAY, "internal_get", getFunType, Bytecode.InvokeMode.STATIC));
-			context.addReadConversion(lval.type.element());
+			context.addReadConversion(lval.type.getReadableElementType());
 			translateUpdate(iterator, rhs, context);
 			context.add(new Bytecode.Load(lval.index.getIndex(), WHILEYINT));
 			context.add(new Bytecode.Swap());
@@ -935,7 +935,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 	private void translateInvokeAsStmt(Location<?> stmt, Context context) {
 		// First, translate the invocation
-		List<Type> returns;
+		Type[] returns;
 		if(stmt.getOpcode() == OPCODE_invoke) {
 			Location<Invoke> e = (Location<Invoke>) stmt;
 			translateInvoke(e, context);
@@ -946,8 +946,8 @@ public class Wyil2JavaBuilder implements Build.Task {
 			returns = e.getBytecode().type().returns();
 		}
 		// Second, if there are results, pop them off the stack
-		for(int i=0;i!=returns.size();++i) {
-			JvmType returnType = context.toJvmType(returns.get(i));
+		for(int i=0;i!=returns.length;++i) {
+			JvmType returnType = context.toJvmType(returns[i]);
 			context.add(new Bytecode.Pop(returnType));
 		}
 	}
@@ -1496,25 +1496,12 @@ public class Wyil2JavaBuilder implements Build.Task {
 		Location<?> lhs = test.getOperand(0);
 		Location<Const> rhs = (Location<Const>) test.getOperand(1);
 
-		if(lhs.getBytecode() instanceof VariableAccess) {
-			Type maximalConsumedType;
-			Type expandedLhsType;
-			Type expandedRhsType;
+		if (lhs.getBytecode() instanceof VariableAccess) {
 			Type lhsType = lhs.getType();
 			Type rhsType = ((Constant.Type) rhs.getBytecode().constant()).value();
-			// Determine the maximally consumed type, and the underlying type.
-			try {
-				maximalConsumedType = typeSystem.getMaximallyConsumedType(rhsType);
-				expandedLhsType = typeSystem.getUnderlyingType(lhsType);
-				expandedRhsType = typeSystem.getUnderlyingType(rhsType);
-			} catch (Exception e) {
-				throw new InternalFailure("error computing maximally consumed type: " + rhsType, file.getEntry(), test,  e);
-			}
-			// Create the relevant types
-			Type typeOnTrueBranch = Type.intersect(expandedLhsType, expandedRhsType);
-			Type typeOnFalseBranch = Type.intersect(expandedLhsType, Type.Negation(maximalConsumedType));
-
-			return new Pair<Type,Type>(typeOnTrueBranch,typeOnFalseBranch);
+			Type trueBranchType = Type.Intersection(lhsType, rhsType);
+			Type falseBranchType = Type.Intersection(lhsType, Type.Negation(rhsType));
+			return new Pair<Type, Type>(trueBranchType, falseBranchType);
 		} else {
 			return null;
 		}
@@ -1579,18 +1566,17 @@ public class Wyil2JavaBuilder implements Build.Task {
 		} else if (type instanceof Type.EffectiveArray) {
 			Type.EffectiveArray ts = (Type.EffectiveArray) type;
 			Triple<String, String, String> loopLabels = translateLoopBegin(variableRegister, freeRegister, context);
-			context.addReadConversion(ts.element());
-			context.add(new Bytecode.Store(freeRegister + 1, toJvmType(ts.element())));
-			translateInvariantTest(falseTarget, ts.element(), freeRegister + 1, freeRegister + 2, context);
+			Type tsElementType = ts.getReadableElementType();
+			context.addReadConversion(tsElementType);
+			context.add(new Bytecode.Store(freeRegister + 1, toJvmType(tsElementType)));
+			translateInvariantTest(falseTarget, tsElementType, freeRegister + 1, freeRegister + 2, context);
 			translateLoopEnd(loopLabels, context);
 		} else if (type instanceof Type.Record) {
 			Type.Record tt = (Type.Record) type;
-			HashMap<String, Type> fields = tt.fields();
-			ArrayList<String> fieldNames = new ArrayList<String>(fields.keySet());
-			Collections.sort(fieldNames);
-			for (int i = 0; i != fieldNames.size(); ++i) {
-				String field = fieldNames.get(i);
-				Type fieldType = fields.get(field);
+			String[] fieldNames = tt.getFieldNames();
+			for (int i = 0; i != fieldNames.length; ++i) {
+				String field = fieldNames[i];
+				Type fieldType = tt.getField(field);
 				JvmType underlyingFieldType = toJvmType(fieldType);
 				context.add(new Bytecode.Load(variableRegister, underlyingType));
 				context.add(new Bytecode.LoadConst(field));
@@ -1615,20 +1601,20 @@ public class Wyil2JavaBuilder implements Build.Task {
 			Type.Union ut = (Type.Union) type;
 			String trueLabel = freshLabel();
 			for (Type bound : ut.bounds()) {
-				try {
-					Type underlyingBound = typeSystem.getUnderlyingType(bound);
+//				try {
+					//Type underlyingBound = typeSystem.getUnderlyingType(bound);
 					String nextLabel = freshLabel();
 					context.add(new Bytecode.Load(variableRegister, toJvmType(type)));
-					translateTypeTest(nextLabel, underlyingBound, context);
+					translateTypeTest(nextLabel, bound, context);
 					context.add(new Bytecode.Load(variableRegister, toJvmType(type)));
 					context.addReadConversion(bound);
 					context.add(new Bytecode.Store(freeRegister, toJvmType(bound)));
 					translateInvariantTest(nextLabel, bound, freeRegister, freeRegister + 1, context);
 					context.add(new Bytecode.Goto(trueLabel));
 					context.add(new Bytecode.Label(nextLabel));
-				} catch (ResolveError e) {
-					throw new InternalFailure(e.getMessage(), file.getEntry(), null, e);
-				}
+//				} catch (ResolveError e) {
+//					throw new InternalFailure(e.getMessage(), file.getEntry(), null, e);
+//				}
 			}
 			context.add(new Bytecode.Goto(falseTarget));
 			context.add(new Bytecode.Label(trueLabel));
@@ -1704,13 +1690,13 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 */
 	protected void translateTypeTest(String falseLabel, Type test, Context context) {
 		// First, try for the easy cases
-		if (test instanceof Type.Null) {
+		if (test == Type.T_NULL) {
 			// Easy case
 			context.add(new Bytecode.If(Bytecode.IfMode.NONNULL, falseLabel));
-		} else if (test instanceof Type.Bool) {
+		} else if (test == Type.T_BOOL) {
 			context.add(new Bytecode.InstanceOf(WHILEYBOOL));
 			context.add(new Bytecode.If(Bytecode.IfMode.EQ, falseLabel));
-		} else if (test instanceof Type.Int) {
+		} else if (test == Type.T_INT) {
 			context.add(new Bytecode.InstanceOf(WHILEYINT));
 			context.add(new Bytecode.If(Bytecode.IfMode.EQ, falseLabel));
 		} else {
@@ -1912,9 +1898,9 @@ public class Wyil2JavaBuilder implements Build.Task {
 		if(constant instanceof Constant.Type) {
 			Constant.Type ct = (Constant.Type) constant;
 			Type type = ct.value();
-			Type underlyingType;
-			underlyingType = typeSystem.getUnderlyingType(type);
-			return new Constant.Type(underlyingType);
+			//Type underlyingType;
+			//underlyingType = typeSystem.getUnderlyingType(type);
+			return new Constant.Type(type);
 		} else {
 			return constant;
 		}
@@ -1955,7 +1941,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 		// Load the field out of the resulting record
 		context.add(new Bytecode.Invoke(WHILEYRECORD, "get", ftype, Bytecode.InvokeMode.STATIC));
 		// Add a read conversion (if necessary) to unbox the value
-		context.addReadConversion(type.field(c.getBytecode().fieldName()));
+		context.addReadConversion(type.getReadableFieldType(c.getBytecode().fieldName()));
 	}
 
 	/**
@@ -2012,11 +1998,10 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 		context.construct(WHILEYRECORD);
 
-		ArrayList<String> keys = new ArrayList<String>(recType.fields().keySet());
-		Collections.sort(keys);
+		String[] keys = recType.getFieldNames();
 		for (int i = 0; i != bytecode.getOperands().length; i++) {
-			String key = keys.get(i);
-			Type fieldType = recType.field(key);
+			String key = keys[i];
+			Type fieldType = recType.getReadableFieldType(key);
 			context.add(new Bytecode.LoadConst(key));
 			translateExpression(bytecode.getOperand(i), context);
 			context.addWriteConversion(fieldType);
@@ -2045,7 +2030,7 @@ public class Wyil2JavaBuilder implements Build.Task {
 
 		for (int i = 0; i != code.getOperands().length; ++i) {
 			translateExpression(code.getOperand(i), context);
-			context.addWriteConversion(arrType.element());
+			context.addWriteConversion(arrType.getReadableElementType());
 			context.add(new Bytecode.Invoke(WHILEYARRAY, "internal_add", ftype, Bytecode.InvokeMode.STATIC));
 		}
 	}
@@ -2103,8 +2088,8 @@ public class Wyil2JavaBuilder implements Build.Task {
 		// Construct the invocation bytecode
 		context.add(createMethodInvocation(bytecode.name(), bytecode.type()));
 		//
-		List<Type> returnTypes = bytecode.type().returns();
-		if(returnTypes.size() > 1) {
+		Type[] returnTypes = bytecode.type().returns();
+		if(returnTypes.length > 1) {
 			decodeOperandArray(returnTypes,context);
 		}
 	}
@@ -2134,11 +2119,11 @@ public class Wyil2JavaBuilder implements Build.Task {
 		JvmType.Function type = new JvmType.Function(JAVA_LANG_OBJECT, JAVA_LANG_OBJECT_ARRAY);
 		context.add(new Bytecode.Invoke(owner, "call", type, Bytecode.InvokeMode.VIRTUAL));
 		// Cast return value to expected type
-		List<Type> returnTypes = bytecode.type().returns();
-		if (returnTypes.size() == 1) {
-			JvmType returnType = toJvmType(ft.returns().get(0));
+		Type[] returnTypes = ft.returns();
+		if (returnTypes.length == 1) {
+			JvmType returnType = toJvmType(returnTypes[0]);
 			context.addCheckCast(returnType);
-		} else if (returnTypes.size() > 1) {
+		} else if (returnTypes.length > 1) {
 			decodeOperandArray(returnTypes, context);
 		}
 	}
@@ -2227,12 +2212,14 @@ public class Wyil2JavaBuilder implements Build.Task {
 	protected void translateConstant(Constant.Type e, Context context) {
 		JavaIdentifierOutputStream jout = new JavaIdentifierOutputStream();
 		BinaryOutputStream bout = new BinaryOutputStream(jout);
-		Type.BinaryWriter writer = new Type.BinaryWriter(bout);
+		BinaryTypeWriter writer = new BinaryTypeWriter(bout);
 		try {
-			writer.write(e.value());
+			writer.write(typeSystem.toAutomaton(e.value()));
 			writer.close();
 		} catch (IOException ex) {
 			throw new RuntimeException(ex.getMessage(), ex);
+		} catch (ResolveError ex) {
+			throw new InternalFailure("error expanding type: " + e.value(), file.getEntry(), null);
 		}
 
 		context.add(new Bytecode.LoadConst(jout.toString()));
@@ -2505,9 +2492,9 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 *            The list of types which are stored in the object array
 	 * @param context
 	 */
-	private void decodeOperandArray(List<Type> types, Context context) {
-		for (int i = 0; i != types.size(); ++i) {
-			Type type = types.get(i);
+	private void decodeOperandArray(Type[] types, Context context) {
+		for (int i = 0; i != types.length; ++i) {
+			Type type = types[i];
 			context.add(new Bytecode.Dup(JAVA_LANG_OBJECT_ARRAY));
 			context.add(new Bytecode.LoadConst(i));
 			context.add(new Bytecode.ArrayLoad(JAVA_LANG_OBJECT_ARRAY));
@@ -2552,13 +2539,13 @@ public class Wyil2JavaBuilder implements Build.Task {
 			paramTypes.add(toJvmType(pt));
 		}
 		JvmType rt;
-		switch (ft.returns().size()) {
+		switch (ft.returns().length) {
 		case 0:
-			rt = T_VOID;
+			rt = VOID;
 			break;
 		case 1:
 			// Single return value
-			rt = toJvmType(ft.returns().get(0));
+			rt = toJvmType(ft.returns()[0]);
 			break;
 		default:
 			// Multiple return value
@@ -2578,18 +2565,18 @@ public class Wyil2JavaBuilder implements Build.Task {
 	 */
 	private JvmType toJvmType(Type t) {
 		if (t == Type.T_VOID) {
-			return T_VOID;
+			return VOID;
 		} else if (t == Type.T_ANY) {
 			return JAVA_LANG_OBJECT;
 		} else if (t == Type.T_NULL) {
 			return JAVA_LANG_OBJECT;
-		} else if (t instanceof Type.Bool) {
+		} else if (t == Type.T_BOOL) {
 			return WHILEYBOOL;
-		} else if (t instanceof Type.Byte) {
+		} else if (t == Type.T_BYTE) {
 			return WHILEYBYTE;
-		} else if (t instanceof Type.Int) {
+		} else if (t == Type.T_INT) {
 			return WHILEYINT;
-		} else if (t instanceof Type.Meta) {
+		} else if (t == Type.T_META) {
 			return WHILEYTYPE;
 		} else if (t instanceof Type.EffectiveArray) {
 			return WHILEYARRAY;
@@ -2598,31 +2585,18 @@ public class Wyil2JavaBuilder implements Build.Task {
 		} else if (t instanceof Type.Reference) {
 			return WHILEYOBJECT;
 		} else if (t instanceof Type.Negation) {
-			// can we do any better?
 			return JAVA_LANG_OBJECT;
 		} else if (t instanceof Type.Union) {
-			// What we need to do here, is determine whether or not a common
-			// specific type exists to all bounds. For example, if all bounds
-			// are records then the true result is WHILEYRECORD. However, in the
-			// general case we just return object.
 			Type.Union ut = (Type.Union) t;
-			JvmType result = null;
-			for (Type bound : ut.bounds()) {
-				JvmType r = toJvmType(bound);
-				if (result == null) {
-					result = r;
-				} else if (!r.equals(result)) {
-					result = JAVA_LANG_OBJECT;
-				}
-			}
-			return result;
-		} else if (t instanceof Type.Meta) {
-			return JAVA_LANG_OBJECT;
+			return toCommonJvmType(ut.bounds());
+		} else if (t instanceof Type.Intersection) {
+			Type.Intersection ut = (Type.Intersection) t;
+			return toCommonJvmType(ut.bounds());
 		} else if (t instanceof Type.FunctionOrMethod) {
 			return WHILEYLAMBDA;
 		} else if (t instanceof Type.Nominal) {
 			try {
-				Type expanded = typeSystem.getUnderlyingType(t);
+				Type expanded = typeSystem.expandOneLevel(t);
 				return toJvmType(expanded);
 			} catch (InternalFailure ex) {
 				throw ex;
@@ -2632,6 +2606,19 @@ public class Wyil2JavaBuilder implements Build.Task {
 		} else {
 			throw new RuntimeException("unknown type encountered: " + t);
 		}
+	}
+
+	private JvmType toCommonJvmType(Type[] types) {
+		JvmType result = null;
+		for (Type bound : types) {
+			JvmType r = toJvmType(bound);
+			if (result == null) {
+				result = r;
+			} else if (!r.equals(result)) {
+				result = JAVA_LANG_OBJECT;
+			}
+		}
+		return result;
 	}
 
 	/**
@@ -2678,10 +2665,13 @@ public class Wyil2JavaBuilder implements Build.Task {
 	private static String typeMangle(Type.FunctionOrMethod ft) throws IOException {
 		JavaIdentifierOutputStream jout = new JavaIdentifierOutputStream();
 		BinaryOutputStream binout = new BinaryOutputStream(jout);
-		Type.BinaryWriter tm = new Type.BinaryWriter(binout);
-		tm.write(ft);
-		binout.close(); // force flush
-		return jout.toString();
+//		Type.BinaryWriter tm = new Type.BinaryWriter(binout);
+//		tm.write(ft);
+//		binout.close(); // force flush
+//		return jout.toString();
+
+		// FIXME: we need an appropriate mangle!!
+		return "";
 	}
 
 	private static <T> T[] append(T[] lhs, T... rhs) {
@@ -2827,12 +2817,12 @@ public class Wyil2JavaBuilder implements Build.Task {
 			add(new Bytecode.New(owner));
 			add(new Bytecode.Dup(owner));
 			ArrayList<JvmType> paramTypes = new ArrayList<JvmType>();
-			JvmType.Function ftype = new JvmType.Function(T_VOID, paramTypes);
+			JvmType.Function ftype = new JvmType.Function(VOID, paramTypes);
 			add(new Bytecode.Invoke(owner, "<init>", ftype, Bytecode.InvokeMode.SPECIAL));
 		}
 
 		public JvmType toJvmType(Type type) {
-			return Wyil2JavaBuilder.this.toJvmType(type);
+			return JvmCompileTask.this.toJvmType(type);
 		}
 
 		public Type.EffectiveArray expandAsEffectiveArray(Type type) throws ResolveError {

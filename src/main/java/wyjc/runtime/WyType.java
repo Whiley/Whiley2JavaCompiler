@@ -357,8 +357,7 @@ public abstract class WyType {
 		case K_INT:
 			return INT;
 		case K_LIST: {
-			boolean nonEmpty = reader.read_bit();
-			return new Array(children[0],nonEmpty);
+			return new Array(children[0],false);
 		}
 		case K_REFERENCE: {
 			return new Reference(children[0]);

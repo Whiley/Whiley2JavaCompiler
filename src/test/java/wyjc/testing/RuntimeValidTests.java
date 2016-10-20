@@ -27,6 +27,7 @@ package wyjc.testing;
 
 import static org.junit.Assert.fail;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,18 +46,12 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import wybs.lang.Build;
-import wybs.util.StdProject;
-import wyc.WycMain;
-import wyc.util.WycBuildTask;
+import wyc.commands.Compile;
+import wyc.util.TestUtils;
+import wycc.util.Logger;
 import wycc.util.Pair;
 import wyfs.lang.Content;
-import wyfs.lang.Path;
-import wyfs.util.DirectoryRoot;
-import wyfs.util.Trie;
-import wyil.Main.Registry;
-import wyjc.WyjcMain;
-import wyjc.util.WyjcBuildTask;
+import wyjc.commands.JvmCompile;
 
 /**
  * Run through all valid test cases with verification enabled. Since every test
@@ -70,7 +65,7 @@ import wyjc.util.WyjcBuildTask;
  */
 @RunWith(Parameterized.class)
 public class RuntimeValidTests {
-	
+
 	/**
 	 * Ignored tests and a reason why we ignore them.
 	 */
@@ -95,7 +90,7 @@ public class RuntimeValidTests {
 		IGNORED.put("OpenRecord_Valid_11", "#585");
 		IGNORED.put("RecordSubtype_Valid_1", "Issue ???");
 		IGNORED.put("RecordSubtype_Valid_2", "Issue ???");
-		IGNORED.put("RecursiveType_Valid_2", "#663");		
+		IGNORED.put("RecursiveType_Valid_2", "#663");
 		IGNORED.put("RecursiveType_Valid_12", "#339");
 		IGNORED.put("RecursiveType_Valid_21", "#663");
 		IGNORED.put("RecursiveType_Valid_22", "#339");
@@ -111,11 +106,11 @@ public class RuntimeValidTests {
 		IGNORED.put("TypeEquals_Valid_41", "Issue ???");
 		IGNORED.put("While_Valid_15", "unknown");
 		IGNORED.put("While_Valid_20", "unknown");
-		
+
 		// Fails and was not listed as test case before parameterizing
 		IGNORED.put("Function_Valid_11", "unknown");
 		IGNORED.put("Function_Valid_15", "unknown");
-	
+
 		// Fails for reasons unknown
 		IGNORED.put("ConstrainedReference_Valid_1", "unknown");
 		IGNORED.put("FunctionRef_Valid_12", "unknown");
@@ -140,24 +135,33 @@ public class RuntimeValidTests {
  	 * @param name
  	 *            Name of the test to run. This must correspond to a whiley
  	 *            source file in the <code>WHILEY_SRC_DIR</code> directory.
+	 * @throws IOException
  	 */
- 	protected void runTest(String name) {
+ 	protected void runTest(String name) throws IOException {
  		// this will need to turn on verification at some point.
- 		String filename = WHILEY_SRC_DIR + File.separatorChar + name + ".whiley";
+ 		String whileyFilename = WHILEY_SRC_DIR + File.separatorChar + name + ".whiley";
 
- 		int r = compile(
- 				"-wd", WHILEY_SRC_DIR,      // location of source directory
- 				"-cd", WHILEY_SRC_DIR,      // location where to place class files
- 				filename);             // name of test to compile
+		// Compile to Java Bytecode
+		Pair<Compile.Result, String> p = compile(
+				WHILEY_SRC_DIR, // location of source directory
+				whileyFilename); // name of test to compile
 
- 		if (r != WycMain.SUCCESS) {
- 			fail("Test failed to compile!");
- 		} else if (r == WycMain.INTERNAL_FAILURE) {
- 			fail("Test caused internal failure!");
- 		}
- 		// Second, execute the generated Java Program.
+		Compile.Result r = p.first();
+
+		System.out.print(p.second());
+
+		if (r == Compile.Result.INTERNAL_FAILURE) {
+			fail("Test caused internal failure!");
+		} else if (r != Compile.Result.SUCCESS) {
+			fail("Test failed to compile!");
+		}
+
+ 		// execute the generated Java Program.
  		String CLASSPATH=System.getProperty("java.class.path");
- 		String output = execClass(CLASSPATH,".","wyjc.testing.RuntimeValidTests",name);
+		// FIXME: if generated classfiles were dumped into target/classes, then
+		// we wouldn't need to append the following onto CLASSPATH.
+ 		CLASSPATH = WHILEY_SRC_DIR + File.pathSeparator + CLASSPATH;
+ 		String output = exec(CLASSPATH,".","wyjc.testing.RuntimeValidTests",name);
  		if(!output.equals("")) {
  			System.out.println(output);
  			fail("unexpected output!");
@@ -165,16 +169,94 @@ public class RuntimeValidTests {
  	}
 
  	/**
+	 * Run the Whiley Compiler with the given list of arguments.
+	 *
+	 * @param args
+	 *            --- list of command-line arguments to provide to the Whiley
+	 *            Compiler.
+	 * @return
+	 * @throws IOException
+	 */
+	public static Pair<Compile.Result,String> compile(String whileydir, String... args) throws IOException {
+		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
+		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
+		Content.Registry registry = new wyc.Activator.Registry();
+		JvmCompile cmd = new JvmCompile(registry,Logger.NULL,sysout,syserr);
+		cmd.setWhileydir(whileydir);
+		cmd.setVerbose();
+		Compile.Result result = cmd.execute(args);
+		byte[] errBytes = syserr.toByteArray();
+		byte[] outBytes = sysout.toByteArray();
+		String output = new String(errBytes) + new String(outBytes);
+		return new Pair<Compile.Result,String>(result,output);
+	}
+
+
+	/**
+	 * Execute a given class file using the "java" command, and return all
+	 * output written to stdout. In the case of some kind of failure, write the
+	 * generated stderr stream to this processes stdout.
+	 *
+	 * @param classPath
+	 *            Class path to use when executing Java code. Note, directories
+	 *            can always be safely separated with '/', and path separated
+	 *            with ':'.
+	 * @param srcDir
+	 *            Path to root of package containing class. Note, directories
+	 *            can always be safely separated with '/'.
+	 * @param className
+	 *            Name of class to execute
+	 * @param args
+	 *            Arguments to supply on the command-line.
+	 * @return All output generated from the class that was written to stdout.
+	 */
+	public static String exec(String classPath, String srcDir, String className, String... args) {
+		try {
+			classPath = classPath.replace('/', File.separatorChar);
+			classPath = classPath.replace(':', File.pathSeparatorChar);
+			srcDir = srcDir.replace('/', File.separatorChar);
+			String tmp = "java -cp " + classPath + " " + className;
+			for (String arg : args) {
+				tmp += " " + arg;
+			}
+			Process p = Runtime.getRuntime().exec(tmp, null, new File(srcDir));
+
+			StringBuffer syserr = new StringBuffer();
+			StringBuffer sysout = new StringBuffer();
+			new TestUtils.StreamGrabber(p.getErrorStream(), syserr);
+			new TestUtils.StreamGrabber(p.getInputStream(), sysout);
+			int exitCode = p.waitFor();
+			if (exitCode != 0) {
+				System.err
+						.println("============================================================");
+				System.err.println(className);
+				System.err
+						.println("============================================================");
+				System.err.println(syserr);
+				return null;
+			} else {
+				return sysout.toString();
+			}
+		} catch (Exception ex) {
+			ex.printStackTrace();
+			fail("Problem running compiled test");
+		}
+
+		return null;
+	}
+
+
+ 	/**
 	 * This is the entry point for each test. The argument provided is the name
 	 * of the test class. The special method "test" is then invoked on this
 	 * class with no arguments provided. The method should execute without
 	 * producing output (success), or report some kind of runtime fault
 	 * (failure).
-	 * 
+	 *
 	 * @param args
 	 */
  	public static void main(String[] args) {
- 		String testClassName = args[0]; 		
+ 		String testClassName = args[0];
  		try {
  			Class testClass = Class.forName(testClassName);
  			Method testMethod = testClass.getMethod("test");
@@ -187,21 +269,8 @@ public class RuntimeValidTests {
  			e.printStackTrace(System.out);
  		} catch (IllegalAccessException e) {
 			e.printStackTrace(System.out);
-		} 
+		}
  	}
- 	
- 	/**
-	 * Run the Whiley Compiler with the given list of arguments.
-	 *
-	 * @param args
-	 *            --- list of command-line arguments to provide to the Whiley
-	 *            Compiler.
-	 * @return
-	 */
-	public static int compile(String... args) {
-		return new WyjcMain(new WyjcBuildTask(), WyjcMain.DEFAULT_OPTIONS)
-				.run(args);
-	}
 
 	/**
 	 * Construct a classpath string from a sequence of path components. Each
@@ -224,132 +293,7 @@ public class RuntimeValidTests {
 		}
 		return r;
 	}
-	
-	/**
-	 * Execute a given class file using the "java" command, and return all
-	 * output written to stdout. In the case of some kind of failure, write the
-	 * generated stderr stream to this processes stdout.
-	 *
-	 * @param classPath
-	 *            Class path to use when executing Java code. Note, directories
-	 *            can always be safely separated with '/', and path separated
-	 *            with ':'.
-	 * @param srcDir
-	 *            Path to root of package containing class. Note, directories
-	 *            can always be safely separated with '/'.
-	 * @param className
-	 *            Name of class to execute
-	 * @param args
-	 *            Arguments to supply on the command-line.
-	 * @return All output generated from the class that was written to stdout.
-	 */
-	public static String execClass(String classPath, String srcDir, String className, String... args) {
-		try {
-			classPath = classPath.replace('/', File.separatorChar);
-			classPath = classPath.replace(':', File.pathSeparatorChar);
-			srcDir = srcDir.replace('/', File.separatorChar);
-			String tmp = "java -cp " + classPath + " " + className;
-			for (String arg : args) {
-				tmp += " " + arg;
-			}
-			Process p = Runtime.getRuntime().exec(tmp, null, new File(srcDir));
 
-			StringBuffer syserr = new StringBuffer();
-			StringBuffer sysout = new StringBuffer();
-			new StreamGrabber(p.getErrorStream(), syserr);
-			new StreamGrabber(p.getInputStream(), sysout);
-			int exitCode = p.waitFor();
-			if (exitCode != 0) {
-				System.err
-						.println("============================================================");
-				System.err.println(className);
-				System.err
-						.println("============================================================");
-				System.err.println(syserr);
-				return null;
-			} else {
-				return sysout.toString();
-			}
-		} catch (Exception ex) {
-			ex.printStackTrace();
-			fail("Problem running compiled test");
-		}
-
-		return null;
-	}
-	
-	/**
-	 * Scan a directory to get the names of all the whiley source files
-	 * in that directory. The list of file names can be used as input
-	 * parameters to a JUnit test.
-	 *
-	 * If the system property <code>test.name.contains</code> is set,
-	 * then the list of files returned will be filtered. Only file
-	 * names that contain the property will be returned. This makes it
-	 * possible to run a subset of tests when testing interactively
-	 * from the command line.
-	 *
-	 * @param srcDir The path of the directory to scan.
-	 */
-	public static Collection<Object[]> findTestNames(String srcDir) {
-		final String suffix = ".whiley";
-		String containsFilter = System.getProperty("test.name.contains");
-
-		ArrayList<Object[]> testcases = new ArrayList<Object[]>();
-		for (File f : new File(srcDir).listFiles()) {
-			// Check it's a file
-			if (!f.isFile()) continue;
-			String name = f.getName();
-			// Check it's a whiley source file
-			if (!name.endsWith(suffix)) continue;
-			// Get rid of ".whiley" extension
-			String testName = name.substring(0, name.length() - suffix.length());
-			// If there's a filter, check the name matches
-			if (containsFilter != null && !testName.contains(containsFilter)) continue;
-			testcases.add(new Object[] { testName });
-		}
-		// Sort the result by filename
-		Collections.sort(testcases, new Comparator<Object[]>() {
-				@Override
-				public int compare(Object[] o1, Object[] o2) {
-					return ((String) o1[0]).compareTo((String) o2[0]);
-				}
-		});
-		return testcases;
-	}
-	
-	/**
-	 * Grab everything produced by a given input stream until the End-Of-File
-	 * (EOF) is reached. This is implemented as a separate thread to ensure that
-	 * reading from other streams can happen concurrently. For example, we can
-	 * read concurrently from <code>stdin</code> and <code>stderr</code> for
-	 * some process without blocking that process.
-	 *
-	 * @author David J. Pearce
-	 *
-	 */
-	static public class StreamGrabber extends Thread {
-		private InputStream input;
-		private StringBuffer buffer;
-
-		StreamGrabber(InputStream input, StringBuffer buffer) {
-			this.input = input;
-			this.buffer = buffer;
-			start();
-		}
-
-		public void run() {
-			try {
-				int nextChar;
-				// keep reading!!
-				while ((nextChar = input.read()) != -1) {
-					buffer.append((char) nextChar);
-				}
-			} catch (IOException ioe) {
-			}
-		}
-	}
-	
 	// ======================================================================
 	// Tests
 	// ======================================================================
@@ -364,7 +308,7 @@ public class RuntimeValidTests {
 	// Here we enumerate all available test cases.
 	@Parameters(name = "{0}")
 	public static Collection<Object[]> data() {
-		return findTestNames(WHILEY_SRC_DIR);
+		return TestUtils.findTestNames(WHILEY_SRC_DIR);
 	}
 
 	// Skip ignored tests

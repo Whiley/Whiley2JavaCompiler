@@ -1,8 +1,8 @@
 package wyjc.util;
 
 import static jasm.lang.JvmTypes.*;
-import static wyjc.Wyil2JavaBuilder.*;
 import static wyil.lang.Bytecode.*;
+import static wyjc.builder.JvmCompileTask.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,9 +12,9 @@ import jasm.lang.JvmType;
 import wybs.util.ResolveError;
 import wyil.lang.SyntaxTree;
 import wyil.lang.SyntaxTree.Location;
+import wyjc.builder.JvmCompileTask.BytecodeTranslator;
+import wyjc.builder.JvmCompileTask.Context;
 import wyil.lang.Type;
-import wyjc.Wyil2JavaBuilder.BytecodeTranslator;
-import wyjc.Wyil2JavaBuilder.Context;
 
 /**
  * Provides implementations for the standard internal functions

@@ -4,6 +4,7 @@
 *.wyil
 *.wyasm
 *.wycs
+*.sysout
 *~
 *.c
 *.o

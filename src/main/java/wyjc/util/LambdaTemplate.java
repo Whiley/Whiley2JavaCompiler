@@ -2,9 +2,8 @@ package wyjc.util;
 
 import static jasm.lang.JvmTypes.JAVA_LANG_OBJECT;
 import static jasm.lang.Modifier.*;
-
-import static wyjc.Wyil2JavaBuilder.JAVA_LANG_OBJECT_ARRAY;
-import static wyjc.Wyil2JavaBuilder.WHILEYLAMBDA;
+import static wyjc.builder.JvmCompileTask.JAVA_LANG_OBJECT_ARRAY;
+import static wyjc.builder.JvmCompileTask.WHILEYLAMBDA;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,7 +15,7 @@ import jasm.lang.ClassFile;
 import jasm.lang.JvmType;
 import jasm.lang.JvmTypes;
 import jasm.lang.Modifier;
-import wyjc.Wyil2JavaBuilder;
+import wyjc.builder.JvmCompileTask;
 
 /**
  * This is a template for generating a "lambda class", which is used to
@@ -159,7 +158,7 @@ public class LambdaTemplate {
 		ArrayList<Bytecode> bytecodes = new ArrayList<Bytecode>();
 		// Call superclass constructor
 		bytecodes.add(new Bytecode.Load(0, thisClass));
-		bytecodes.add(new Bytecode.Invoke(Wyil2JavaBuilder.WHILEYLAMBDA, "<init>", superConstructorType,
+		bytecodes.add(new Bytecode.Invoke(JvmCompileTask.WHILEYLAMBDA, "<init>", superConstructorType,
 				Bytecode.InvokeMode.SPECIAL));
 		// Assign each parameter to a corresponding named field.
 		for (int i = 0; i != environment.length; ++i) {
