@@ -81,7 +81,10 @@
       <fileset dir="${JAVA_DIR}" includes="**/*.java"/>
     </jar>
     <!-- build javadoc jar -->
-    <javadoc sourcepath="${JAVA_DIR}" destdir="${DOC_DIR}" />
+    <javadoc sourcepath="${JAVA_DIR}" destdir="${DOC_DIR}">
+      <classpath refid="MAVEN_DEPS"/>      
+      <arg value="-Xdoclint:none"/>
+    </javadoc>    
     <jar jarfile="${DOC_JAR}">
       <fileset dir="${DOC_DIR}" />
     </jar>    
