@@ -1,4 +1,4 @@
-<project name="wyjc" default="build" xmlns:artifact="urn:maven-ant">
+<project name="wyc" default="build" xmlns:artifact="urn:maven-ant">
 
   <!-- ================================================================== -->
   <!-- Configuration -->
@@ -50,7 +50,10 @@
   <!-- ================================================================== -->
 
   <target name="test" depends="compile-tests">
-    <junit printsummary="true" fork="yes" haltonfailure="yes">
+    <junit printsummary="yes"
+	   fork="yes"
+	   haltonfailure="yes">
+      <formatter type="plain" usefile="false"/>
       <batchtest>
         <fileset dir="${TEST_DIR}" includes="**/*Tests.java"/>
       </batchtest>
@@ -84,7 +87,7 @@
     <javadoc sourcepath="${JAVA_DIR}" destdir="${DOC_DIR}">
       <classpath refid="MAVEN_DEPS"/>      
       <arg value="-Xdoclint:none"/>
-    </javadoc>    
+    </javadoc>
     <jar jarfile="${DOC_JAR}">
       <fileset dir="${DOC_DIR}" />
     </jar>    
