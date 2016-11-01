@@ -1422,8 +1422,6 @@ public class JvmCompileTask implements Build.Task {
 		Pair<Type,Type> flowTypes = determineFlowTypes(test,context);
 		// Add the necessary branch
 		if(flowTypes == null) {
-			// FIXME: bug here in case where constrained type is being tested
-
 			// In this case, no retyping is possible. Therefore, we branch
 			// directly to the relevant destination.
 			if(trueLabel == null) {
@@ -1517,12 +1515,18 @@ public class JvmCompileTask implements Build.Task {
 	 *            Type variable should become
 	 * @param enclosing
 	 *            Enclosing context.
+	 * @throws ResolveError
 	 */
 	private void retypeLocation(Location<VariableAccess> location, Type type, Context enclosing) {
-		Location<VariableDeclaration> decl = getVariableDeclaration(location);
-		enclosing.add(new Bytecode.Load(decl.getIndex(), toJvmType(type)));
-		enclosing.addReadConversion(type);
-		enclosing.add(new Bytecode.Store(decl.getIndex(), toJvmType(type)));
+		try {
+			type = typeSystem.expandOneLevel(type);
+			Location<VariableDeclaration> decl = getVariableDeclaration(location);
+			enclosing.add(new Bytecode.Load(decl.getIndex(), toJvmType(type)));
+			enclosing.addReadConversion(type);
+			enclosing.add(new Bytecode.Store(decl.getIndex(), toJvmType(type)));
+		} catch(ResolveError e) {
+			throw new InternalFailure(e.getMessage(), file.getEntry(), location, e);
+		}
 	}
 
 	/**
