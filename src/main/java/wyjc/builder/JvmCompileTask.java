@@ -1519,9 +1519,7 @@ public class JvmCompileTask implements Build.Task {
 	 */
 	private void retypeLocation(Location<VariableAccess> location, Type type, Context enclosing) {
 		try {
-			System.out.print("EXPANDING: " + type + " => ");
 			type = typeSystem.expandOneLevel(type);
-			System.out.println(type);
 			Location<VariableDeclaration> decl = getVariableDeclaration(location);
 			enclosing.add(new Bytecode.Load(decl.getIndex(), toJvmType(type)));
 			enclosing.addReadConversion(type);
