@@ -73,10 +73,13 @@ public class RuntimeValidTests {
 
 	static {
 		IGNORED.put("Coercion_Valid_8", "#681");
+		IGNORED.put("Complex_Valid_2", "#5,#692");
 		IGNORED.put("Complex_Valid_3", "Issue ???");
 		IGNORED.put("Complex_Valid_4", "#681");
+		IGNORED.put("Complex_Valid_8", "#5,#692");
 		IGNORED.put("Contractive_Valid_1", "#6");
 		IGNORED.put("ConstrainedIntersection_Valid_1", "unknown");
+		IGNORED.put("ConstrainedList_Valid_15", "#5,#692");
 		IGNORED.put("ConstrainedNegation_Valid_1", "#342");
 		IGNORED.put("ConstrainedNegation_Valid_2", "#342");
 		IGNORED.put("DoWhile_Valid_4", "#681");
