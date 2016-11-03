@@ -75,6 +75,7 @@ public class RuntimeValidTests {
 		IGNORED.put("Coercion_Valid_8", "#681");
 		IGNORED.put("Complex_Valid_3", "Issue ???");
 		IGNORED.put("Complex_Valid_4", "#681");
+		IGNORED.put("Contractive_Valid_1", "#6");
 		IGNORED.put("ConstrainedIntersection_Valid_1", "unknown");
 		IGNORED.put("ConstrainedNegation_Valid_1", "#342");
 		IGNORED.put("ConstrainedNegation_Valid_2", "#342");
@@ -102,6 +103,7 @@ public class RuntimeValidTests {
 		IGNORED.put("RecursiveType_Valid_3", "#681");
 		IGNORED.put("RecursiveType_Valid_4", "#406");
 		IGNORED.put("RecursiveType_Valid_5", "#18");
+		IGNORED.put("Syntax_Valid_1", "#5");
 		IGNORED.put("TypeEquals_Valid_23", "Issue ???");
 		IGNORED.put("TypeEquals_Valid_24", "#681");
 		IGNORED.put("TypeEquals_Valid_29", "#681");
