@@ -2658,7 +2658,7 @@ public class JvmCompileTask implements Build.Task {
 		return "cfblab" + label++;
 	}
 
-	private static String nameMangle(String name, Type.FunctionOrMethod ft) {
+	private String nameMangle(String name, Type.FunctionOrMethod ft) {
 		try {
 			return name + "$" + typeMangle(ft);
 		} catch (IOException e) {
@@ -2666,16 +2666,19 @@ public class JvmCompileTask implements Build.Task {
 		}
 	}
 
-	private static String typeMangle(Type.FunctionOrMethod ft) throws IOException {
+	private String typeMangle(Type.FunctionOrMethod ft) throws IOException {
 		JavaIdentifierOutputStream jout = new JavaIdentifierOutputStream();
-		BinaryOutputStream binout = new BinaryOutputStream(jout);
-//		Type.BinaryWriter tm = new Type.BinaryWriter(binout);
-//		tm.write(ft);
-//		binout.close(); // force flush
-//		return jout.toString();
-
-		// FIXME: we need an appropriate mangle!!
-		return "";
+		try {
+			BinaryOutputStream binout = new BinaryOutputStream(jout);
+			BinaryTypeWriter tm = new BinaryTypeWriter(binout);
+			tm.write(typeSystem.toAutomaton(ft));
+			binout.close(); // force flush
+		} catch (IOException ex) {
+			throw new RuntimeException(ex.getMessage(), ex);
+		} catch (ResolveError ex) {
+			throw new InternalFailure("error expanding type: " + ft, file.getEntry(), null);
+		}
+		return jout.toString();
 	}
 
 	private static <T> T[] append(T[] lhs, T... rhs) {
