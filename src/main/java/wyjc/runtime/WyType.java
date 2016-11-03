@@ -360,6 +360,7 @@ public abstract class WyType {
 			return new Array(children[0],false);
 		}
 		case K_REFERENCE: {
+			String lifetime = readString(reader);
 			return new Reference(children[0]);
 		}
 		case K_RECORD: {
@@ -389,6 +390,14 @@ public abstract class WyType {
 		}
 		case K_METHOD: {
 			int numParams = reader.read_uv();
+			int numContextLifetimes = reader.read_uv();
+			for(int i=0;i!=numContextLifetimes;++i) {
+				String contextLifetime = readString(reader);
+			}
+			int numLifetimeParameters = reader.read_uv();
+			for(int i=0;i!=numLifetimeParameters;++i) {
+				String lifetimeParameter = readString(reader);
+			}
 			return new WyType.Method(Arrays.copyOfRange(children, numParams, children.length),
 					Arrays.copyOfRange(children, 0, numParams));
 		}
