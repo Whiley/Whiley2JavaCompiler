@@ -117,6 +117,7 @@ public class RuntimeValidTests {
 		IGNORED.put("TypeEquals_Valid_41", "Issue ???");
 		IGNORED.put("TypeEquals_Valid_42", "#681");
 		IGNORED.put("TypeEquals_Valid_47", "#681");
+		IGNORED.put("TypeEquals_Valid_57", "???");
 		IGNORED.put("While_Valid_15", "#681");
 		IGNORED.put("While_Valid_20", "unknown");
 	}
