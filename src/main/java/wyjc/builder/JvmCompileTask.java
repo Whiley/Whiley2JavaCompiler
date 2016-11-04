@@ -1596,7 +1596,7 @@ public class JvmCompileTask implements Build.Task {
 			// runtime type information about a function or method reference. In
 			// principle, this could be encoded in the WyLambda in some way.
 		} else if (type instanceof Type.Negation) {
-			Type.Reference rt = (Type.Reference) type;
+			Type.Negation rt = (Type.Negation) type;
 			String trueTarget = freshLabel();
 			translateInvariantTest(trueTarget, rt.element(), variableRegister, freeRegister, context);
 			context.add(new Bytecode.Goto(falseTarget));
@@ -2568,6 +2568,16 @@ public class JvmCompileTask implements Build.Task {
 	 * @return
 	 */
 	private JvmType toJvmType(Type t) {
+		try {
+			Type expanded = typeSystem.expandOneLevel(t);
+			return toJvmTypeInternal(expanded);
+		} catch (InternalFailure ex) {
+			throw ex;
+		} catch (Exception e) {
+			throw new InternalFailure("error expanding type: " + t, file.getEntry(), null);
+		}
+	}
+	private JvmType toJvmTypeInternal(Type t) {
 		if (t == Type.T_VOID) {
 			return VOID;
 		} else if (t == Type.T_ANY) {
@@ -2598,15 +2608,6 @@ public class JvmCompileTask implements Build.Task {
 			return toCommonJvmType(ut.bounds());
 		} else if (t instanceof Type.FunctionOrMethod) {
 			return WHILEYLAMBDA;
-		} else if (t instanceof Type.Nominal) {
-			try {
-				Type expanded = typeSystem.expandOneLevel(t);
-				return toJvmType(expanded);
-			} catch (InternalFailure ex) {
-				throw ex;
-			} catch (Exception e) {
-				throw new InternalFailure("error expanding type: " + t, file.getEntry(), null);
-			}
 		} else {
 			throw new RuntimeException("unknown type encountered: " + t);
 		}
