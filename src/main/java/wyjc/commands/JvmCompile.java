@@ -62,7 +62,9 @@ public class JvmCompile extends Compile {
 		Content.Filter<WyilFile> wyilExcludes = null;
 		// Rule for compiling Whiley to WyIL
 		JvmCompileTask jvmBuilder = new JvmCompileTask(project);
-		jvmBuilder.setLogger(logger);
+		if(verbose) {
+			jvmBuilder.setLogger(logger);
+		}
 		// FIXME: should be able to set class directory
 		project.add(new StdBuildRule(jvmBuilder, wyildir, wyilIncludes, wyilExcludes, wyildir));
 	}
