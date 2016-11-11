@@ -38,7 +38,7 @@ import static wyil.util.TypeSystem.K_NULL;
 import static wyil.util.TypeSystem.K_BOOL;
 import static wyil.util.TypeSystem.K_BYTE;
 import static wyil.util.TypeSystem.K_INT;
-import static wyil.util.TypeSystem.K_LIST;
+import static wyil.util.TypeSystem.K_ARRAY;
 import static wyil.util.TypeSystem.K_REFERENCE;
 import static wyil.util.TypeSystem.K_RECORD;
 import static wyil.util.TypeSystem.K_UNION;
@@ -168,7 +168,7 @@ public abstract class WyType {
 		public final boolean nonEmpty;
 
 		public Array(WyType element, boolean nonEmpty) {
-			super(K_LIST);
+			super(K_ARRAY);
 			this.element = element;
 			this.nonEmpty = nonEmpty;
 		}
@@ -356,7 +356,7 @@ public abstract class WyType {
 			return BYTE;
 		case K_INT:
 			return INT;
-		case K_LIST: {
+		case K_ARRAY: {
 			return new Array(children[0],false);
 		}
 		case K_REFERENCE: {
@@ -427,7 +427,7 @@ public abstract class WyType {
 		case K_INT:
 		case K_NOMINAL:
 			return;
-		case K_LIST: {
+		case K_ARRAY: {
 			Array t = (Array) type;
 			t.element = substitute((Label)t.element,nodes);
 			return;
@@ -523,7 +523,7 @@ public abstract class WyType {
 					return leaf;
 				}
 			}
-			case K_LIST:
+			case K_ARRAY:
 			{
 				WyType.Array list = (WyType.Array) type;
 				list.element = substitute(list.element,label,root,visited);
@@ -606,7 +606,7 @@ public abstract class WyType {
 			WyType.Nominal leaf = (WyType.Nominal) t;
 			return leaf.name;
 		}
-		case K_LIST: {
+		case K_ARRAY: {
 			WyType.Array list = (WyType.Array) t;
 			return toString(list.element,visited) + "[]";
 		}
