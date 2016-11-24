@@ -287,8 +287,8 @@ public class JvmCompileTask implements Build.Task {
 		ft1 = new JvmType.Function(WHILEYRECORD, new JvmType.Array(JAVA_LANG_STRING));
 		codes.add(new Bytecode.Load(0, strArr));
 		codes.add(new Bytecode.Invoke(WHILEYUTIL, "systemConsole", ft1, Bytecode.InvokeMode.STATIC));
-		Type.Method wyft = (Type.Method) Type.Method(Collections.<String> emptySet(), Collections.<String> emptyList(),new Type[0],
-				new Type[]{WHILEY_SYSTEM_T});
+		Type.Method wyft = (Type.Method) Type.Method(Collections.<String> emptySet(), Collections.<String> emptyList(),
+				new Type[] { WHILEY_SYSTEM_T }, new Type[0]);
 		JvmType.Function ft3 = convertFunType(wyft);
 		codes.add(new Bytecode.Invoke(owner, nameMangle("main", wyft), ft3, Bytecode.InvokeMode.STATIC));
 		codes.add(new Bytecode.Return(null));
