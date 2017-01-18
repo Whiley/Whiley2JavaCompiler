@@ -10,6 +10,7 @@ import wycc.lang.Module;
 import wycc.util.Logger;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
+import wyjc.commands.JavaCompile;
 import wyjc.commands.JvmCompile;
 
 public class Activator implements Module.Activator {
@@ -95,7 +96,9 @@ public class Activator implements Module.Activator {
 		// FIXME: logger is a hack!
 		final Logger logger = new Logger.Default(System.err);
 		// List of commands to use
-		final Command[] commands = { new JvmCompile(registry, logger) };
+		final Command[] commands = {
+				new JvmCompile(registry, logger),
+				new JavaCompile(registry, logger)};
 		// Register all commands
 		for (Command c : commands) {
 			context.register(wycc.lang.Command.class, c);
