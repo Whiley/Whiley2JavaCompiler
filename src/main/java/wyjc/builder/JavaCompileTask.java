@@ -134,7 +134,7 @@ public class JavaCompileTask implements Build.Task {
 		if (type instanceof Type.Record) {
 			Type.Record recT = (Type.Record) type;
 			JavaFile.Class typeClass = new JavaFile.Class(decl.name());
-			typeClass.getModifiers().add(JavaFile.Modifier.PUBLIC);
+			addModifiers(typeClass,decl.modifiers());
 			typeClass.getModifiers().add(JavaFile.Modifier.STATIC);
 			typeClass.getModifiers().add(JavaFile.Modifier.FINAL);
 			// Write field declartions
@@ -264,13 +264,14 @@ public class JavaCompileTask implements Build.Task {
 		Type.FunctionOrMethod ft = decl.type();
 		JavaFile.Type returnType = translateReturnTypes(ft.returns());
 		//
-		JavaFile.Method method = new JavaFile.Method(decl.name(),returnType);
+		JavaFile.Method method = new JavaFile.Method(decl.name(), returnType);
 		addModifiers(method, decl.modifiers());
+		method.getModifiers().add(JavaFile.Modifier.STATIC);
 		//
-		for(int i=0;i!=ft.params().length;++i) {
+		for (int i = 0; i != ft.params().length; ++i) {
 			Location<VariableDeclaration> pd = (Location<VariableDeclaration>) tree.getLocation(i);
 			JavaFile.Type pt = translateType(ft.parameter(i));
-			method.getParameters().add(new Pair<>(pt,pd.getBytecode().getName()));
+			method.getParameters().add(new Pair<>(pt, pd.getBytecode().getName()));
 		}
 		//
 		// FIXME: preconditions / postconditions?
@@ -281,7 +282,7 @@ public class JavaCompileTask implements Build.Task {
 
 	private JavaFile.Block translateBlock(Location<Bytecode.Block> block) {
 		JavaFile.Block jblock = new JavaFile.Block();
-		for(Location<?> term : block.getOperands()) {
+		for (Location<?> term : block.getOperands()) {
 			JavaFile.Term jterm = translateStatement(term);
 			jblock.getTerms().add(jterm);
 		}
@@ -291,40 +292,43 @@ public class JavaCompileTask implements Build.Task {
 	private JavaFile.Term translateStatement(Location<?> c) {
 		switch (c.getOpcode()) {
 		case Bytecode.OPCODE_aliasdecl:
-			//return translateAliasDeclaration((Location<Bytecode.AliasDeclaration>) c);
+			// return
+			// translateAliasDeclaration((Location<Bytecode.AliasDeclaration>)
+			// c);
 		case Bytecode.OPCODE_assert:
-			//return translateAssert((Location<Bytecode.Assert>) c);
+			return translateAssert((Location<Bytecode.Assert>) c);
 		case Bytecode.OPCODE_assume:
-			//return translateAssume((Location<Bytecode.Assume>) c);
+			return translateAssume((Location<Bytecode.Assume>) c);
 		case Bytecode.OPCODE_assign:
-			//return translateAssign((Location<Bytecode.Assign>) c);
+			// return translateAssign((Location<Bytecode.Assign>) c);
 		case Bytecode.OPCODE_break:
-			//return translateBreak((Location<Bytecode.Break>) c);
+			return translateBreak((Location<Bytecode.Break>) c);
 		case Bytecode.OPCODE_continue:
-			//return translateContinue((Location<Bytecode.Continue>) c);
+			return translateContinue((Location<Bytecode.Continue>) c);
 		case Bytecode.OPCODE_debug:
-			//return translateDebug((Location<Bytecode.Debug>) c);
+			// return translateDebug((Location<Bytecode.Debug>) c);
 		case Bytecode.OPCODE_dowhile:
-			//return translateDoWhile((Location<Bytecode.DoWhile>) c);
+			// return translateDoWhile((Location<Bytecode.DoWhile>) c);
 		case Bytecode.OPCODE_fail:
-			//return translateFail((Location<Bytecode.Fail>) c);
+			// return translateFail((Location<Bytecode.Fail>) c);
 		case Bytecode.OPCODE_if:
 		case Bytecode.OPCODE_ifelse:
-			//return translateIf((Location<Bytecode.If>) c);
+			return translateIf((Location<Bytecode.If>) c);
 		case Bytecode.OPCODE_indirectinvoke:
-			//return translateIndirectInvoke((Location<Bytecode.IndirectInvoke>) c);
+			// return
+			// translateIndirectInvoke((Location<Bytecode.IndirectInvoke>) c);
 		case Bytecode.OPCODE_invoke:
-			//return translateInvoke((Location<Bytecode.Invoke>) c);
+			// return translateInvoke((Location<Bytecode.Invoke>) c);
 		case Bytecode.OPCODE_namedblock:
-			//return translateNamedBlock((Location<Bytecode.NamedBlock>) c);
+			// return translateNamedBlock((Location<Bytecode.NamedBlock>) c);
 		case Bytecode.OPCODE_while:
-			//return translateWhile((Location<Bytecode.While>) c);
+			// return translateWhile((Location<Bytecode.While>) c);
 		case Bytecode.OPCODE_return:
 			return translateReturn((Location<Bytecode.Return>) c);
 		case Bytecode.OPCODE_skip:
-			//return translateSkip((Location<Bytecode.Skip>) c);
+			// return translateSkip((Location<Bytecode.Skip>) c);
 		case Bytecode.OPCODE_switch:
-			//return translateSwitch((Location<Bytecode.Switch>) c);
+			// return translateSwitch((Location<Bytecode.Switch>) c);
 		case Bytecode.OPCODE_vardecl:
 		case Bytecode.OPCODE_vardeclinit:
 			return translateVariableDeclaration((Location<Bytecode.VariableDeclaration>) c);
@@ -333,19 +337,47 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
+	private JavaFile.Term translateAssert(Location<Bytecode.Assert> stmt) {
+		JavaFile.Term operand = translateExpression(stmt.getOperand(0));
+		return new JavaFile.Assert(operand);
+	}
+
+	private JavaFile.Term translateAssume(Location<Bytecode.Assume> stmt) {
+		JavaFile.Term operand = translateExpression(stmt.getOperand(0));
+		return new JavaFile.Assert(operand);
+	}
+
+	private JavaFile.Term translateBreak(Location<Bytecode.Break> stmt) {
+		return new JavaFile.Break();
+	}
+
+	private JavaFile.Term translateContinue(Location<Bytecode.Continue> stmt) {
+		return new JavaFile.Continue();
+	}
+
+	private JavaFile.Term translateIf(Location<Bytecode.If> stmt) {
+		JavaFile.Term operand = translateExpression(stmt.getOperand(0));
+		JavaFile.Block trueBranch = translateBlock(stmt.getBlock(0));
+		JavaFile.Block falseBranch = null;
+		if(stmt.numberOfBlocks() > 1) {
+			falseBranch = translateBlock(stmt.getBlock(1));
+		}
+		return new JavaFile.If(operand,trueBranch,falseBranch);
+	}
+
 	private JavaFile.Term translateVariableDeclaration(Location<Bytecode.VariableDeclaration> stmt) {
 		Bytecode.VariableDeclaration d = stmt.getBytecode();
 		JavaFile.Type type = translateType(stmt.getType());
 		JavaFile.Term initialiser = null;
-		if(stmt.numberOfOperands() > 0) {
+		if (stmt.numberOfOperands() > 0) {
 			initialiser = translateExpression(stmt.getOperand(0));
 		}
-		return new JavaFile.VariableDeclaration(type,d.getName(),initialiser);
+		return new JavaFile.VariableDeclaration(type, d.getName(), initialiser);
 	}
 
 	private JavaFile.Term translateReturn(Location<Bytecode.Return> stmt) {
 		JavaFile.Term initialiser = null;
-		if(stmt.numberOfOperands() > 0) {
+		if (stmt.numberOfOperands() > 0) {
 			initialiser = translateExpression(stmt.getOperand(0));
 		}
 		return new JavaFile.Return(initialiser);
@@ -413,44 +445,43 @@ public class JavaCompileTask implements Build.Task {
 		case Bytecode.OPCODE_varaccess:
 			return translateVariableAccess((Location<Bytecode.VariableAccess>) expr);
 		default:
-			throw new IllegalArgumentException("unknown bytecode encountered: " +
-					expr.getBytecode());
+			throw new IllegalArgumentException("unknown bytecode encountered: " + expr.getBytecode());
 		}
 	}
 
 	private JavaFile.Term translateOperator(Location<Bytecode.Operator> expr) {
 		List<JavaFile.Term> children = new ArrayList<>();
-		for(int i=0;i!=expr.numberOfOperands();++i) {
+		for (int i = 0; i != expr.numberOfOperands(); ++i) {
 			children.add(translateExpression(expr.getOperand(i)));
 		}
 		JavaFile.Operator.Kind kind = translateOpcode(expr.getBytecode().kind());
-		return new JavaFile.Operator(kind,children);
+		return new JavaFile.Operator(kind, children);
 	}
 
 	private JavaFile.Term translateConvert(Location<Bytecode.Convert> expr) {
-//		out.print("(");
-//		writeType(expr.getType());
-//		out.print(") ");
-//		writeExpression(expr.getOperand(0));
+		// out.print("(");
+		// writeType(expr.getType());
+		// out.print(") ");
+		// writeExpression(expr.getOperand(0));
 		return null;
 	}
 
 	private JavaFile.Term translateConst(Location<Bytecode.Const> expr) {
 		Constant c = expr.getBytecode().constant();
 		Object value;
-		if(c instanceof Constant.Null) {
+		if (c instanceof Constant.Null) {
 			value = null;
-		} else if(c instanceof Constant.Bool) {
+		} else if (c instanceof Constant.Bool) {
 			Constant.Bool bc = (Constant.Bool) c;
 			value = bc.value();
-		} else if(c instanceof Constant.Integer) {
+		} else if (c instanceof Constant.Integer) {
 			Constant.Integer bc = (Constant.Integer) c;
 			// FIXME: bug for large integer values here
 			BigInteger bi = bc.value();
 			long lv = bi.longValue();
-			if(lv >= Integer.MIN_VALUE && lv < Integer.MAX_VALUE) {
+			if (lv >= Integer.MIN_VALUE && lv < Integer.MAX_VALUE) {
 				value = (int) lv;
-			} else  {
+			} else {
 				value = lv;
 			}
 		} else {
@@ -460,105 +491,107 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	private JavaFile.Term translateFieldLoad(Location<Bytecode.FieldLoad> expr) {
-//		writeBracketedExpression(expr.getOperand(0));
-//		out.print("." + expr.getBytecode().fieldName());
+		// writeBracketedExpression(expr.getOperand(0));
+		// out.print("." + expr.getBytecode().fieldName());
 		return null;
 	}
 
-	private JavaFile.Term translateIndirectInvoke(Location<Bytecode.IndirectInvoke> expr)
-	{
-//		Location<?>[] operands = expr.getOperands();
-//		writeExpression(operands[0]);
-//		out.print("(");
-//		for (int i = 1; i != operands.length; ++i) {
-//			if (i != 1) {
-//				out.print(", ");
-//			}
-//			writeExpression(operands[i]);
-//		}
-//		out.print(")");
+	private JavaFile.Term translateIndirectInvoke(Location<Bytecode.IndirectInvoke> expr) {
+		// Location<?>[] operands = expr.getOperands();
+		// writeExpression(operands[0]);
+		// out.print("(");
+		// for (int i = 1; i != operands.length; ++i) {
+		// if (i != 1) {
+		// out.print(", ");
+		// }
+		// writeExpression(operands[i]);
+		// }
+		// out.print(")");
 		return null;
 	}
 
 	private JavaFile.Term translateInvoke(Location<Bytecode.Invoke> expr) {
-//		out.print(expr.getBytecode().name() + "(");
-//		Location<?>[] operands = expr.getOperands();
-//		for (int i = 0; i != operands.length; ++i) {
-//			if (i != 0) {
-//				out.print(", ");
-//			}
-//			writeExpression(operands[i]);
-//		}
-//		out.print(")");
-		return null;
+		Location<?>[] operands = expr.getOperands();
+		List<String> path = new ArrayList<>();
+		List<JavaFile.Term> arguments = new ArrayList<>();
+		path.add(expr.getBytecode().name().name());
+		for (int i = 0; i != operands.length; ++i) {
+			arguments.add(translateExpression(operands[i]));
+		}
+		return new JavaFile.Invoke(null, path, arguments);
 	}
 
 	@SuppressWarnings("unchecked")
 	private JavaFile.Term translateLambda(Location<Bytecode.Lambda> expr) {
-//		out.print("&[");
-//		Location<?>[] environment = expr.getOperandGroup(SyntaxTree.ENVIRONMENT);
-//		for (int i = 0; i != environment.length; ++i) {
-//			Location<VariableDeclaration> var = (Location<VariableDeclaration>) environment[i];
-//			if (i != 0) {
-//				out.print(", ");
-//			}
-//			out.print(var.getType());
-//			out.print(" ");
-//			out.print(var.getBytecode().getName());
-//		}
-//		out.print("](");
-//		Location<?>[] parameters = expr.getOperandGroup(SyntaxTree.PARAMETERS);
-//		for (int i = 0; i != parameters.length; ++i) {
-//			Location<VariableDeclaration> var = (Location<VariableDeclaration>) parameters[i];
-//			if (i != 0) {
-//				out.print(", ");
-//			}
-//			out.print(var.getType());
-//			out.print(" ");
-//			out.print(var.getBytecode().getName());
-//		}
-//		out.print(" -> ");
-//		writeExpression(expr.getOperand(0));
-//		out.print(")");
+		// out.print("&[");
+		// Location<?>[] environment =
+		// expr.getOperandGroup(SyntaxTree.ENVIRONMENT);
+		// for (int i = 0; i != environment.length; ++i) {
+		// Location<VariableDeclaration> var = (Location<VariableDeclaration>)
+		// environment[i];
+		// if (i != 0) {
+		// out.print(", ");
+		// }
+		// out.print(var.getType());
+		// out.print(" ");
+		// out.print(var.getBytecode().getName());
+		// }
+		// out.print("](");
+		// Location<?>[] parameters =
+		// expr.getOperandGroup(SyntaxTree.PARAMETERS);
+		// for (int i = 0; i != parameters.length; ++i) {
+		// Location<VariableDeclaration> var = (Location<VariableDeclaration>)
+		// parameters[i];
+		// if (i != 0) {
+		// out.print(", ");
+		// }
+		// out.print(var.getType());
+		// out.print(" ");
+		// out.print(var.getBytecode().getName());
+		// }
+		// out.print(" -> ");
+		// writeExpression(expr.getOperand(0));
+		// out.print(")");
 		return null;
 	}
 
 	private JavaFile.Term translateRecordConstructor(Location<Bytecode.Operator> expr) {
-//		Type.EffectiveRecord t = (Type.EffectiveRecord) expr.getType();
-//		String[] fields = t.getFieldNames();
-//		Location<?>[] operands = expr.getOperands();
-//		out.print("{");
-//		for (int i = 0; i != operands.length; ++i) {
-//			if (i != 0) {
-//				out.print(", ");
-//			}
-//			out.print(fields[i]);
-//			out.print(" ");
-//			writeExpression(operands[i]);
-//		}
-//		out.print("}");
+		// Type.EffectiveRecord t = (Type.EffectiveRecord) expr.getType();
+		// String[] fields = t.getFieldNames();
+		// Location<?>[] operands = expr.getOperands();
+		// out.print("{");
+		// for (int i = 0; i != operands.length; ++i) {
+		// if (i != 0) {
+		// out.print(", ");
+		// }
+		// out.print(fields[i]);
+		// out.print(" ");
+		// writeExpression(operands[i]);
+		// }
+		// out.print("}");
 		return null;
 	}
 
 	@SuppressWarnings("unchecked")
 	private JavaFile.Term translateQuantifier(Location<Bytecode.Quantifier> c) {
-//		out.print(quantifierKind(c));
-//		out.print(" { ");
-//		for (int i = 0; i != c.numberOfOperandGroups(); ++i) {
-//			Location<?>[] range = c.getOperandGroup(i);
-//			if (i != 0) {
-//				out.print(", ");
-//			}
-//			Location<VariableDeclaration> v = (Location<VariableDeclaration>) range[SyntaxTree.VARIABLE];
-//			out.print(v.getBytecode().getName());
-//			out.print(" in ");
-//			writeExpression(range[SyntaxTree.START]);
-//			out.print("..");
-//			writeExpression(range[SyntaxTree.END]);
-//		}
-//		out.print(" | ");
-//		writeExpression(c.getOperand(SyntaxTree.CONDITION));
-//		out.print(" } ");
+		// out.print(quantifierKind(c));
+		// out.print(" { ");
+		// for (int i = 0; i != c.numberOfOperandGroups(); ++i) {
+		// Location<?>[] range = c.getOperandGroup(i);
+		// if (i != 0) {
+		// out.print(", ");
+		// }
+		// Location<VariableDeclaration> v = (Location<VariableDeclaration>)
+		// range[SyntaxTree.VARIABLE];
+		// out.print(v.getBytecode().getName());
+		// out.print(" in ");
+		// writeExpression(range[SyntaxTree.START]);
+		// out.print("..");
+		// writeExpression(range[SyntaxTree.END]);
+		// }
+		// out.print(" | ");
+		// writeExpression(c.getOperand(SyntaxTree.CONDITION));
+		// out.print(" } ");
 		return null;
 	}
 
@@ -566,8 +599,10 @@ public class JavaCompileTask implements Build.Task {
 		Location<VariableDeclaration> vd = getVariableDeclaration(expr.getOperand(0));
 		JavaFile.Term t = new JavaFile.VariableAccess(vd.getBytecode().getName());
 		JavaFile.Type type = translateType(expr.getType());
-		if(!isCopyable(type)) {
-			throw new RuntimeException("GOT HERE");
+		if (!isCopyable(type)) {
+			// Since this type is not copyable, we need to clone it to ensure
+			// that ownership is properly preserved.
+			t = new JavaFile.Invoke(t, "clone");
 		}
 		return t;
 	}

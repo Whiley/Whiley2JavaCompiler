@@ -72,6 +72,7 @@ public class JavaFileWriter {
 		out.print(")");
 		if(methodDecl.getBody() != null) {
 			writeBlock(indent,methodDecl.getBody());
+			out.println();
 		} else {
 			out.println(";");
 		}
@@ -83,17 +84,51 @@ public class JavaFileWriter {
 		for(JavaFile.Term term : block.getTerms()) {
 			writeStatement(indent+1,term);
 		}
-		tab(indent);out.println("}");
+		tab(indent);out.print("}");
 	}
 
 	private void writeStatement(int indent, JavaFile.Term term) {
 		tab(indent);
-		if(term instanceof JavaFile.Return) {
+		if(term instanceof JavaFile.Assert) {
+			writeAssert(indent,(JavaFile.Assert) term);
+		} else if(term instanceof JavaFile.Break) {
+			writeBreak(indent,(JavaFile.Break) term);
+		} else if(term instanceof JavaFile.Continue) {
+			writeContinue(indent,(JavaFile.Continue) term);
+		} else if(term instanceof JavaFile.If) {
+			writeIf(indent,(JavaFile.If) term);
+		} else if(term instanceof JavaFile.Return) {
 			writeReturn(indent,(JavaFile.Return) term);
 		} else if(term instanceof JavaFile.VariableDeclaration) {
 			writeVariableDeclaration(indent,(JavaFile.VariableDeclaration) term);
 		} else {
 			throw new IllegalArgumentException("unknown statement: " + term);
+		}
+	}
+
+	private void writeAssert(int indent, JavaFile.Assert term) {
+		out.print("assert ");
+		writeExpression(term.getOperand());
+		out.println(";");
+	}
+
+	private void writeBreak(int indent, JavaFile.Break term) {
+		out.print("break;");
+	}
+
+	private void writeContinue(int indent, JavaFile.Continue term) {
+		out.print("continue;");
+	}
+
+	private void writeIf(int indent, JavaFile.If term) {
+		out.print("if(");
+		writeExpression(term.getCondition());
+		out.print(") ");
+		writeBlock(indent, term.getTrueBranch());
+		if (term.getFalseBranch() != null) {
+			out.print(" else ");
+			writeBlock(indent, term.getFalseBranch());
+			out.println();
 		}
 	}
 
@@ -133,6 +168,8 @@ public class JavaFileWriter {
 	private void writeExpression(JavaFile.Term term) {
 		if(term instanceof JavaFile.Constant) {
 			writeConstant((JavaFile.Constant) term);
+		} else if(term instanceof JavaFile.Invoke) {
+			writeInvoke((JavaFile.Invoke) term);
 		} else if(term instanceof JavaFile.Operator) {
 			writeOperator((JavaFile.Operator) term);
 		} else if(term instanceof JavaFile.VariableAccess) {
@@ -154,6 +191,18 @@ public class JavaFileWriter {
 		} else {
 			out.print(term.getValue());
 		}
+	}
+
+	private void writeInvoke(JavaFile.Invoke term) {
+		JavaFile.Term receiver = term.getReceiver();
+		if(receiver != null) {
+			writeExpression(receiver);
+			out.print(".");
+		}
+		writePath(term.getPath());
+		out.print("(");
+		writeArguments(term.getArguments());
+		out.print(")");
 	}
 
 	private void writeOperator(JavaFile.Operator term) {
@@ -236,6 +285,20 @@ public class JavaFileWriter {
 		out.print(term.getName());
 	}
 
+	/**
+	 * Print out a comma-separated list of argument expressions.
+	 *
+	 * @param arguments
+	 */
+	private void writeArguments(List<JavaFile.Term> arguments) {
+		for(int i=0;i!=arguments.size();++i) {
+			if(i != 0) {
+				out.print(", ");
+			}
+			writeExpression(arguments.get(i));
+		}
+	}
+
 	private void writeType(JavaFile.Type type) {
 		if(type instanceof JavaFile.Primitive) {
 			JavaFile.Primitive pt = (JavaFile.Primitive) type;
@@ -252,6 +315,15 @@ public class JavaFileWriter {
 				}
 				out.print(rt.get(i));
 			}
+		}
+	}
+
+	private void writePath(List<String> path) {
+		for(int i=0;i!=path.size();++i) {
+			if(i != 0) {
+				out.print(".");
+			}
+			out.print(path.get(i));
 		}
 	}
 

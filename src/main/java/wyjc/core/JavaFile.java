@@ -7,6 +7,7 @@ package wyjc.core;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import wybs.lang.CompilationUnit;
@@ -180,6 +181,24 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class Assert implements Term {
+		private Term operand;
+
+		public Assert(Term operand) {
+			this.operand = operand;
+		}
+
+		public Term getOperand() {
+			return operand;
+		}
+	}
+
+	public static class Break implements Term {
+	}
+
+	public static class Continue implements Term {
+	}
+
 	public static class Constant implements Term {
 		private Object value;
 
@@ -193,6 +212,61 @@ public class JavaFile extends AbstractCompilationUnit {
 
 		public Object getValue() {
 			return value;
+		}
+	}
+
+	public static class If implements Term {
+		private Term condition;
+		private Block trueBranch;
+		private Block falseBranch;
+
+		public If(Term condition, Block trueBranch, Block falseBranch) {
+			this.condition = condition;
+			this.trueBranch = trueBranch;
+			this.falseBranch = falseBranch;
+		}
+
+		public Term getCondition() {
+			return condition;
+		}
+
+		public Block getTrueBranch() {
+			return trueBranch;
+		}
+
+		public Block getFalseBranch() {
+			return falseBranch;
+		}
+	}
+
+	public static class Invoke implements Term {
+		private Term receiver;
+		private List<String> path;
+		private List<Term> arguments;
+
+		public Invoke(Term receiver, String name, Term... arguments) {
+			this.receiver = receiver;
+			this.path = new ArrayList<>();
+			this.path.add(name);
+			this.arguments = Arrays.asList(arguments);
+		}
+
+		public Invoke(Term receiver, List<String> path, List<Term> arguments) {
+			this.receiver = receiver;
+			this.path = new ArrayList<>(path);
+			this.arguments = new ArrayList<>(arguments);
+		}
+
+		public Term getReceiver() {
+			return receiver;
+		}
+
+		public List<String> getPath() {
+			return path;
+		}
+
+		public List<Term> getArguments() {
+			return arguments;
 		}
 	}
 
