@@ -12,6 +12,7 @@ import java.util.List;
 
 import wycc.util.Pair;
 import wyjc.core.*;
+import wyrl.core.Type.Term;
 
 public class JavaFileWriter {
 	private final PrintWriter out;
@@ -68,9 +69,171 @@ public class JavaFileWriter {
 			out.print(" ");
 			out.print(p.second());
 		}
-		out.println(") {");
+		out.print(")");
+		if(methodDecl.getBody() != null) {
+			writeBlock(indent,methodDecl.getBody());
+		} else {
+			out.println(";");
+		}
+
+	}
+
+	private void writeBlock(int indent, JavaFile.Block block) {
+		out.println(" {");
+		for(JavaFile.Term term : block.getTerms()) {
+			writeStatement(indent+1,term);
+		}
+		tab(indent);out.println("}");
+	}
+
+	private void writeStatement(int indent, JavaFile.Term term) {
 		tab(indent);
-		out.println("}");
+		if(term instanceof JavaFile.Return) {
+			writeReturn(indent,(JavaFile.Return) term);
+		} else if(term instanceof JavaFile.VariableDeclaration) {
+			writeVariableDeclaration(indent,(JavaFile.VariableDeclaration) term);
+		} else {
+			throw new IllegalArgumentException("unknown statement: " + term);
+		}
+	}
+
+	private void writeReturn(int indent, JavaFile.Return term) {
+		out.print("return");
+		if(term.getInitialiser() != null) {
+			out.print(" ");
+			writeExpression(term.getInitialiser());
+		}
+		out.println(";");
+	}
+
+	private void writeVariableDeclaration(int indent, JavaFile.VariableDeclaration term) {
+		writeType(term.getType());
+		out.print(" ");
+		out.print(term.getName());
+		if(term.getInitialiser() != null) {
+			out.print(" = ");
+			writeExpression(term.getInitialiser());
+		}
+		out.println(";");
+	}
+
+	private void writeExpressionWithBraces(JavaFile.Term term) {
+		if(term instanceof JavaFile.Operator) {
+			JavaFile.Operator op = (JavaFile.Operator) term;
+			if(!isPrefix(op.getKind())) {
+				out.print("(");
+				writeExpression(term);
+				out.print(")");
+				return;
+			}
+		}
+		writeExpression(term);
+	}
+
+	private void writeExpression(JavaFile.Term term) {
+		if(term instanceof JavaFile.Constant) {
+			writeConstant((JavaFile.Constant) term);
+		} else if(term instanceof JavaFile.Operator) {
+			writeOperator((JavaFile.Operator) term);
+		} else if(term instanceof JavaFile.VariableAccess) {
+			writeVariableAccess((JavaFile.VariableAccess) term);
+		} else {
+			throw new IllegalArgumentException("unknown term encountered: " + term);
+		}
+	}
+
+	private void writeConstant(JavaFile.Constant term) {
+		Object value = term.getValue();
+		if(value instanceof String) {
+			out.print("\"");
+			out.print(term.getValue());
+			out.print("\"");
+		} else if(value instanceof Long) {
+			out.print(term.getValue());
+			out.print("L");
+		} else {
+			out.print(term.getValue());
+		}
+	}
+
+	private void writeOperator(JavaFile.Operator term) {
+		JavaFile.Operator.Kind kind = term.getKind();
+		String operator = getOperatorString(kind);
+		List<JavaFile.Term> operands = term.getOperands();
+		if(isPrefix(kind)) {
+			out.print(operator);
+			writeExpressionWithBraces(operands.get(0));
+		} else {
+			writeExpressionWithBraces(operands.get(0));
+			out.print(" ");
+			out.print(operator);
+			out.print(" ");
+			writeExpressionWithBraces(operands.get(1));
+		}
+	}
+
+	private boolean isPrefix(JavaFile.Operator.Kind kind) {
+		switch(kind) {
+		case NOT:
+		case NEG:
+		case BITWISEINVERT:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	private String getOperatorString(JavaFile.Operator.Kind kind) {
+		switch(kind) {
+		case NOT:
+			return "!";
+		case NEG:
+			return "-";
+		case EQ:
+			return "==";
+		case NEQ:
+			return "!=";
+		case LT:
+			return "<";
+		case LTEQ:
+			return "<=";
+		case GT:
+			return ">";
+		case GTEQ:
+			return ">=";
+		case ADD:
+			return "+";
+		case SUB:
+			return "-";
+		case MUL:
+			return "*";
+		case DIV:
+			return "/";
+		case REM:
+			return "%";
+		case AND:
+			return "&&";
+		case OR:
+			return "||";
+		case BITWISEOR:
+			return "|";
+		case BITWISEXOR:
+			return "^";
+		case BITWISEAND:
+			return "&";
+		case BITWISEINVERT:
+			return "~";
+		case LEFTSHIFT:
+			return "<<";
+		case RIGHTSHIFT:
+			return ">>";
+		default:
+			throw new IllegalArgumentException("unknown operator kind: " + kind);
+		}
+	}
+
+	private void writeVariableAccess(JavaFile.VariableAccess term) {
+		out.print(term.getName());
 	}
 
 	private void writeType(JavaFile.Type type) {

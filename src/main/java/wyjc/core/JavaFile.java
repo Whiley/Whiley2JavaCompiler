@@ -138,6 +138,7 @@ public class JavaFile extends AbstractCompilationUnit {
 	public static class Method extends AbstractDeclaration implements Declaration {
 		private Type returnType;
 		private List<Pair<Type,String>> parameters = new ArrayList<>();
+		private Block body;
 
 		public Method(String name, Type returnType) {
 			super(name);
@@ -150,6 +151,112 @@ public class JavaFile extends AbstractCompilationUnit {
 
 		public List<Pair<Type,String>> getParameters() {
 			return parameters;
+		}
+
+		public Block getBody() {
+			return body;
+		}
+
+		public void setBody(Block block) {
+			this.body = block;
+		}
+	}
+
+	/**
+	 * Represents either a statement or expression in a Java source file.
+	 *
+	 * @author David J. Pearce
+	 *
+	 */
+	public interface Term {
+
+	}
+
+	public static class Block implements Term {
+		private List<Term> terms = new ArrayList<>();
+
+		public List<Term> getTerms() {
+			return terms;
+		}
+	}
+
+	public static class Constant implements Term {
+		private Object value;
+
+		public Constant(Object value) {
+			if (value == null || value instanceof Boolean || value instanceof Integer || value instanceof String) {
+				this.value = value;
+			} else {
+				throw new IllegalArgumentException("invalid constant value: " + value);
+			}
+		}
+
+		public Object getValue() {
+			return value;
+		}
+	}
+
+	public static class Operator implements Term {
+		public enum Kind {
+			NOT, NEG, EQ, NEQ, LT, LTEQ, GT, GTEQ, ADD, SUB, MUL, DIV, REM, AND, OR, BITWISEOR, BITWISEXOR, BITWISEAND, BITWISEINVERT, LEFTSHIFT, RIGHTSHIFT
+		}
+		private Kind kind;
+		private List<Term> operands;
+
+		public Operator(Kind kind, List<Term> operands) {
+			this.kind = kind;
+			this.operands = operands;
+		}
+
+		public Kind getKind() {
+			return kind;
+		}
+
+		public List<Term> getOperands() {
+			return operands;
+		}
+	}
+
+	public static class Return implements Term {
+		private Term initialiser;
+
+		public Return(Term initialiser) {
+			this.initialiser = initialiser;
+		}
+
+		public Term getInitialiser() {
+			return initialiser;
+		}
+	}
+
+	public static class VariableDeclaration extends AbstractDeclaration implements Term {
+		private Type type;
+		private Term initialiser;
+
+		public VariableDeclaration(Type type, String name, Term initialiser) {
+			super(name);
+			this.type = type;
+			this.initialiser = initialiser;
+		}
+
+		public Type getType() {
+			return type;
+		}
+
+		public Term getInitialiser() {
+			return initialiser;
+		}
+	}
+
+	public static class VariableAccess implements Term {
+		private String name;
+
+		public VariableAccess(String name) {
+			this.name = name;
+		}
+
+		public String getName() {
+			return name;
 		}
 	}
 

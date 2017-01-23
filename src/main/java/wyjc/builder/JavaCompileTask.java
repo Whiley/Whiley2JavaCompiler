@@ -7,6 +7,7 @@
 package wyjc.builder;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.util.*;
 
 import wybs.lang.Build;
@@ -146,7 +147,7 @@ public class JavaCompileTask implements Build.Task {
 			parent.getDeclarations().add(typeClass);
 		}
 	}
-	//
+
 	// private void writeFieldDeclarations(int indent, Type.Record recT) {
 	// String[] fields = recT.getFieldNames();
 	// for(int i=0;i!=recT.size();++i) {
@@ -261,18 +262,93 @@ public class JavaCompileTask implements Build.Task {
 	private void build(WyilFile.FunctionOrMethod decl, JavaFile.Class parent) {
 		SyntaxTree tree = decl.getTree();
 		Type.FunctionOrMethod ft = decl.type();
-		JavaFile.Type returnType = convertReturns(ft.returns());
+		JavaFile.Type returnType = translateReturnTypes(ft.returns());
 		//
 		JavaFile.Method method = new JavaFile.Method(decl.name(),returnType);
+		addModifiers(method, decl.modifiers());
 		//
 		for(int i=0;i!=ft.params().length;++i) {
 			Location<VariableDeclaration> pd = (Location<VariableDeclaration>) tree.getLocation(i);
-			JavaFile.Type pt = convert(ft.parameter(i));
+			JavaFile.Type pt = translateType(ft.parameter(i));
 			method.getParameters().add(new Pair<>(pt,pd.getBytecode().getName()));
 		}
 		//
-		addModifiers(method, decl.modifiers());
+		// FIXME: preconditions / postconditions?
+		//
+		method.setBody(translateBlock(decl.getBody()));
 		parent.getDeclarations().add(method);
+	}
+
+	private JavaFile.Block translateBlock(Location<Bytecode.Block> block) {
+		JavaFile.Block jblock = new JavaFile.Block();
+		for(Location<?> term : block.getOperands()) {
+			JavaFile.Term jterm = translateStatement(term);
+			jblock.getTerms().add(jterm);
+		}
+		return jblock;
+	}
+
+	private JavaFile.Term translateStatement(Location<?> c) {
+		switch (c.getOpcode()) {
+		case Bytecode.OPCODE_aliasdecl:
+			//return translateAliasDeclaration((Location<Bytecode.AliasDeclaration>) c);
+		case Bytecode.OPCODE_assert:
+			//return translateAssert((Location<Bytecode.Assert>) c);
+		case Bytecode.OPCODE_assume:
+			//return translateAssume((Location<Bytecode.Assume>) c);
+		case Bytecode.OPCODE_assign:
+			//return translateAssign((Location<Bytecode.Assign>) c);
+		case Bytecode.OPCODE_break:
+			//return translateBreak((Location<Bytecode.Break>) c);
+		case Bytecode.OPCODE_continue:
+			//return translateContinue((Location<Bytecode.Continue>) c);
+		case Bytecode.OPCODE_debug:
+			//return translateDebug((Location<Bytecode.Debug>) c);
+		case Bytecode.OPCODE_dowhile:
+			//return translateDoWhile((Location<Bytecode.DoWhile>) c);
+		case Bytecode.OPCODE_fail:
+			//return translateFail((Location<Bytecode.Fail>) c);
+		case Bytecode.OPCODE_if:
+		case Bytecode.OPCODE_ifelse:
+			//return translateIf((Location<Bytecode.If>) c);
+		case Bytecode.OPCODE_indirectinvoke:
+			//return translateIndirectInvoke((Location<Bytecode.IndirectInvoke>) c);
+		case Bytecode.OPCODE_invoke:
+			//return translateInvoke((Location<Bytecode.Invoke>) c);
+		case Bytecode.OPCODE_namedblock:
+			//return translateNamedBlock((Location<Bytecode.NamedBlock>) c);
+		case Bytecode.OPCODE_while:
+			//return translateWhile((Location<Bytecode.While>) c);
+		case Bytecode.OPCODE_return:
+			return translateReturn((Location<Bytecode.Return>) c);
+		case Bytecode.OPCODE_skip:
+			//return translateSkip((Location<Bytecode.Skip>) c);
+		case Bytecode.OPCODE_switch:
+			//return translateSwitch((Location<Bytecode.Switch>) c);
+		case Bytecode.OPCODE_vardecl:
+		case Bytecode.OPCODE_vardeclinit:
+			return translateVariableDeclaration((Location<Bytecode.VariableDeclaration>) c);
+		default:
+			throw new IllegalArgumentException("unknown bytecode encountered");
+		}
+	}
+
+	private JavaFile.Term translateVariableDeclaration(Location<Bytecode.VariableDeclaration> stmt) {
+		Bytecode.VariableDeclaration d = stmt.getBytecode();
+		JavaFile.Type type = translateType(stmt.getType());
+		JavaFile.Term initialiser = null;
+		if(stmt.numberOfOperands() > 0) {
+			initialiser = translateExpression(stmt.getOperand(0));
+		}
+		return new JavaFile.VariableDeclaration(type,d.getName(),initialiser);
+	}
+
+	private JavaFile.Term translateReturn(Location<Bytecode.Return> stmt) {
+		JavaFile.Term initialiser = null;
+		if(stmt.numberOfOperands() > 0) {
+			initialiser = translateExpression(stmt.getOperand(0));
+		}
+		return new JavaFile.Return(initialiser);
 	}
 
 	private void writeLocationsAsComments(SyntaxTree tree) {
@@ -284,647 +360,217 @@ public class JavaCompileTask implements Build.Task {
 			System.out.println("// " + id + " " + type + " " + loc.getBytecode());
 		}
 	}
-	//
-	// private void writeReturns(Type[] returns) {
-	// if (returns.length > 1) {
-	// throw new RuntimeException("Missing support for multiple returns");
-	// } else if (returns.length == 0) {
-	// out.print("void");
-	// } else {
-	// writeType(returns[0]);
-	// }
-	// }
-	//
-	// private void writeParameters(WyilFile.FunctionOrMethod fm) {
-	// Type.FunctionOrMethod ft = fm.type();
-	// SyntaxTree tree = fm.getTree();
-	// Type[] parameters = ft.params();
-	// out.print("(");
-	// for (int i = 0; i != parameters.length; ++i) {
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// writeType(parameters[i]);
-	// out.print(" ");
-	// Location<VariableDeclaration> d = (Location<VariableDeclaration>)
-	// tree.getLocation(i);
-	// out.print(d.getBytecode().getName());
-	// }
-	// out.print(")");
-	// }
-	//
-	// private void writeBlock(int indent, Location<Bytecode.Block> block) {
-	// for (int i = 0; i != block.numberOfOperands(); ++i) {
-	// writeStatement(indent, block.getOperand(i));
-	// }
-	// }
-	//
+
 	// @SuppressWarnings("unchecked")
-	// private void writeStatement(int indent, Location<?> c) {
-	// tabIndent(indent);
-	// switch (c.getOpcode()) {
-	// case Bytecode.OPCODE_aliasdecl:
-	// writeAliasDeclaration(indent, (Location<Bytecode.AliasDeclaration>) c);
-	// break;
-	// case Bytecode.OPCODE_assert:
-	// writeAssert(indent, (Location<Bytecode.Assert>) c);
-	// break;
-	// case Bytecode.OPCODE_assume:
-	// writeAssume(indent, (Location<Bytecode.Assume>) c);
-	// break;
-	// case Bytecode.OPCODE_assign:
-	// writeAssign(indent, (Location<Bytecode.Assign>) c);
-	// break;
-	// case Bytecode.OPCODE_break:
-	// writeBreak(indent, (Location<Bytecode.Break>) c);
-	// break;
-	// case Bytecode.OPCODE_continue:
-	// writeContinue(indent, (Location<Bytecode.Continue>) c);
-	// break;
-	// case Bytecode.OPCODE_debug:
-	// writeDebug(indent, (Location<Bytecode.Debug>) c);
-	// break;
-	// case Bytecode.OPCODE_dowhile:
-	// writeDoWhile(indent, (Location<Bytecode.DoWhile>) c);
-	// break;
-	// case Bytecode.OPCODE_fail:
-	// writeFail(indent, (Location<Bytecode.Fail>) c);
-	// break;
-	// case Bytecode.OPCODE_if:
-	// case Bytecode.OPCODE_ifelse:
-	// writeIf(indent, (Location<Bytecode.If>) c);
-	// break;
-	// case Bytecode.OPCODE_indirectinvoke:
-	// writeIndirectInvoke(indent, (Location<Bytecode.IndirectInvoke>) c);
-	// break;
-	// case Bytecode.OPCODE_invoke:
-	// writeInvoke(indent, (Location<Bytecode.Invoke>) c);
-	// break;
-	// case Bytecode.OPCODE_namedblock:
-	// writeNamedBlock(indent, (Location<Bytecode.NamedBlock>) c);
-	// break;
-	// case Bytecode.OPCODE_while:
-	// writeWhile(indent, (Location<Bytecode.While>) c);
-	// break;
-	// case Bytecode.OPCODE_return:
-	// writeReturn(indent, (Location<Bytecode.Return>) c);
-	// break;
-	// case Bytecode.OPCODE_skip:
-	// writeSkip(indent, (Location<Bytecode.Skip>) c);
-	// break;
-	// case Bytecode.OPCODE_switch:
-	// writeSwitch(indent, (Location<Bytecode.Switch>) c);
-	// break;
-	// case Bytecode.OPCODE_vardecl:
-	// case Bytecode.OPCODE_vardeclinit:
-	// writeVariableDeclaration(indent, (Location<Bytecode.VariableDeclaration>)
-	// c);
-	// break;
-	// default:
-	// throw new IllegalArgumentException("unknown bytecode encountered");
-	// }
-	// }
-	//
-	// private void writeAliasDeclaration(int indent, Location<AliasDeclaration>
-	// loc) {
-	// out.print("alias ");
-	// out.print(loc.getType());
-	// out.print(" ");
-	// Location<VariableDeclaration> aliased = getVariableDeclaration(loc);
-	// out.print(aliased.getBytecode().getName());
-	// out.println(";");
-	// }
-	//
-	// private void writeAssert(int indent, Location<Bytecode.Assert> c) {
-	// out.print("assert ");
-	// writeExpression(c.getOperand(0));
-	// out.println(";");
-	// }
-	//
-	// private void writeAssume(int indent, Location<Bytecode.Assume> c) {
-	// out.print("assume ");
-	// writeExpression(c.getOperand(0));
-	// out.println(";");
-	// }
-	//
-	// private void writeAssign(int indent, Location<Bytecode.Assign> stmt) {
-	// Location<?>[] lhs = stmt.getOperandGroup(SyntaxTree.LEFTHANDSIDE);
-	// Location<?>[] rhs = stmt.getOperandGroup(SyntaxTree.RIGHTHANDSIDE);
-	// if (lhs.length > 0) {
-	// for (int i = 0; i != lhs.length; ++i) {
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// writeExpression(lhs[i]);
-	// }
-	// out.print(" = ");
-	// }
-	// writeExpressions(rhs);
-	// out.println(";");
-	// }
-	//
-	// private void writeBreak(int indent, Location<Bytecode.Break> b) {
-	// out.println("break;");
-	// }
-	//
-	// private void writeContinue(int indent, Location<Bytecode.Continue> b) {
-	// out.println("continue;");
-	// }
-	//
-	// private void writeDebug(int indent, Location<Bytecode.Debug> b) {
-	//
-	// }
-	//
-	// private void writeDoWhile(int indent, Location<Bytecode.DoWhile> b) {
-	// Location<?>[] loopInvariant = b.getOperandGroup(0);
-	// Location<?>[] modifiedOperands = b.getOperandGroup(1);
-	// out.println("do:");
-	// //
-	// writeBlock(indent + 1, b.getBlock(0));
-	// tabIndent(indent);
-	// out.print("while ");
-	// writeExpression(b.getOperand(0));
-	// out.print(" modifies ");
-	// writeExpressions(modifiedOperands);
-	// for (Location<?> invariant : loopInvariant) {
-	// out.println();
-	// tabIndent(indent + 1);
-	// out.print("where ");
-	// writeExpression(invariant);
-	// }
-	// // FIXME: add invariants
-	// out.println();
-	// }
-	//
-	// private void writeFail(int indent, Location<Bytecode.Fail> c) {
-	//
-	// }
-	//
-	// private void writeIf(int indent, Location<Bytecode.If> b) {
-	// out.print("if(");
-	// writeExpression(b.getOperand(0));
-	// out.println(") {");
-	// writeBlock(indent + 1, b.getBlock(0));
-	// //
-	// if (b.numberOfBlocks() > 1) {
-	// tabIndent(indent);
-	// out.println("} else {");
-	// writeBlock(indent + 1, b.getBlock(1));
-	// }
-	// //
-	// tabIndent(indent);
-	// out.println("}");
-	// }
-	//
-	// private void writeIndirectInvoke(int indent,
-	// Location<Bytecode.IndirectInvoke> stmt) {
-	// Location<?>[] operands = stmt.getOperands();
-	// writeExpression(operands[0]);
-	// out.print("(");
-	// for (int i = 1; i != operands.length; ++i) {
-	// if (i != 1) {
-	// out.print(", ");
-	// }
-	// writeExpression(operands[i]);
-	// }
-	// out.println(")");
-	// }
-	//
-	// private void writeInvoke(int indent, Location<Bytecode.Invoke> stmt) {
-	// out.print(stmt.getBytecode().name() + "(");
-	// Location<?>[] operands = stmt.getOperands();
-	// for (int i = 0; i != operands.length; ++i) {
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// writeExpression(operands[i]);
-	// }
-	// out.println(")");
-	// }
-	//
-	// private void writeNamedBlock(int indent, Location<Bytecode.NamedBlock> b)
-	// {
-	// out.print(b.getBytecode().getName());
-	// out.println(": {");
-	// writeBlock(indent + 1, b.getBlock(0));
-	// tabIndent(indent);out.println("}");
-	// }
-	//
-	// private void writeWhile(int indent, Location<Bytecode.While> b) {
-	// out.print("while(");
-	// writeExpression(b.getOperand(0));
-	// out.println(") {");
-	// writeBlock(indent + 1, b.getBlock(0));
-	// tabIndent(indent);
-	// out.println("}");
-	// }
-	//
-	// private void writeReturn(int indent, Location<Bytecode.Return> b) {
-	// Location<?>[] operands = b.getOperands();
-	// out.print("return");
-	// if (operands.length > 0) {
-	// out.print(" ");
-	// writeExpressions(operands);
-	// }
-	// out.println(";");
-	// }
-	//
-	// private void writeSkip(int indent, Location<Bytecode.Skip> b) {
-	// out.println("// skip");
-	// }
-	//
-	// private void writeSwitch(int indent, Location<Bytecode.Switch> b) {
-	// out.print("switch ");
-	// writeExpression(b.getOperand(0));
-	// out.println(":");
-	// for (int i = 0; i != b.numberOfBlocks(); ++i) {
-	// // FIXME: ugly
-	// Bytecode.Case cAse = b.getBytecode().cases()[i];
-	// Constant[] values = cAse.values();
-	// tabIndent(indent + 2);
-	// if (values.length == 0) {
-	// out.println("default:");
-	// } else {
-	// out.print("case ");
-	// for (int j = 0; j != values.length; ++j) {
-	// if (j != 0) {
-	// out.print(", ");
-	// }
-	// out.print(values[j]);
-	// }
-	// out.println(":");
-	// }
-	// writeBlock(indent + 2, b.getBlock(i));
-	// }
-	// }
-	//
-	// private void writeVariableAccess(Location<VariableAccess> loc) {
-	// Location<VariableDeclaration> vd =
-	// getVariableDeclaration(loc.getOperand(0));
-	// out.print(vd.getBytecode().getName());
-	// }
-	//
-	// private void writeVariableDeclaration(int indent,
-	// Location<VariableDeclaration> loc) {
-	// Location<?>[] operands = loc.getOperands();
-	// writeType(loc.getType());
-	// out.print(" ");
-	// out.print(loc.getBytecode().getName());
-	// if (operands.length > 0) {
-	// out.print(" = ");
-	// writeExpression(operands[0]);
-	// }
-	// out.println(";");
-	// }
-	//
-	// /**
-	// * Write a bracketed operand if necessary. Any operand whose
-	// human-readable
-	// * representation can contain whitespace must have brackets around it.
-	// *
-	// * @param operand
-	// * @param enclosing
-	// * @param out
-	// */
-	// private void writeBracketedExpression(Location<?> expr) {
-	// boolean needsBrackets = needsBrackets(expr.getBytecode());
-	// if (needsBrackets) {
-	// out.print("(");
-	// }
-	// writeExpression(expr);
-	// if (needsBrackets) {
-	// out.print(")");
-	// }
-	// }
-	//
-	// private void writeExpressions(Location<?>[] exprs) {
-	// for (int i = 0; i != exprs.length; ++i) {
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// writeExpression(exprs[i]);
-	// }
-	// }
-	//
-	// @SuppressWarnings("unchecked")
-	// private void writeExpression(Location<?> expr) {
-	// switch (expr.getOpcode()) {
-	// case Bytecode.OPCODE_arraylength:
-	// writeArrayLength((Location<Bytecode.Operator>) expr);
-	// break;
-	// case Bytecode.OPCODE_arrayindex:
-	// writeArrayIndex((Location<Bytecode.Operator>) expr);
-	// break;
-	// case Bytecode.OPCODE_array:
-	// writeArrayInitialiser((Location<Bytecode.Operator>) expr);
-	// break;
-	// case Bytecode.OPCODE_arraygen:
-	// writeArrayGenerator((Location<Bytecode.Operator>) expr);
-	// break;
-	// case Bytecode.OPCODE_convert:
-	// writeConvert((Location<Bytecode.Convert>) expr);
-	// break;
-	// case Bytecode.OPCODE_const:
-	// writeConst((Location<Bytecode.Const>) expr);
-	// break;
-	// case Bytecode.OPCODE_fieldload:
-	// writeFieldLoad((Location<Bytecode.FieldLoad>) expr);
-	// break;
-	// case Bytecode.OPCODE_indirectinvoke:
-	// writeIndirectInvoke((Location<Bytecode.IndirectInvoke>) expr);
-	// break;
-	// case Bytecode.OPCODE_invoke:
-	// writeInvoke((Location<Bytecode.Invoke>) expr);
-	// break;
-	// case Bytecode.OPCODE_lambda:
-	// writeLambda((Location<Bytecode.Lambda>) expr);
-	// break;
-	// case Bytecode.OPCODE_record:
-	// writeRecordConstructor((Location<Bytecode.Operator>) expr);
-	// break;
-	// case Bytecode.OPCODE_newobject:
-	// writeNewObject((Location<Bytecode.Operator>) expr);
-	// break;
-	// case Bytecode.OPCODE_dereference:
-	// case Bytecode.OPCODE_logicalnot:
-	// case Bytecode.OPCODE_neg:
-	// case Bytecode.OPCODE_bitwiseinvert:
-	// writePrefixLocations((Location<Bytecode.Operator>) expr);
-	// break;
-	// case Bytecode.OPCODE_all:
-	// case Bytecode.OPCODE_some:
-	// writeQuantifier((Location<Bytecode.Quantifier>) expr);
-	// break;
-	// case Bytecode.OPCODE_add:
-	// case Bytecode.OPCODE_sub:
-	// case Bytecode.OPCODE_mul:
-	// case Bytecode.OPCODE_div:
-	// case Bytecode.OPCODE_rem:
-	// case Bytecode.OPCODE_eq:
-	// case Bytecode.OPCODE_ne:
-	// case Bytecode.OPCODE_lt:
-	// case Bytecode.OPCODE_le:
-	// case Bytecode.OPCODE_gt:
-	// case Bytecode.OPCODE_ge:
-	// case Bytecode.OPCODE_logicaland:
-	// case Bytecode.OPCODE_logicalor:
-	// case Bytecode.OPCODE_bitwiseor:
-	// case Bytecode.OPCODE_bitwisexor:
-	// case Bytecode.OPCODE_bitwiseand:
-	// case Bytecode.OPCODE_shl:
-	// case Bytecode.OPCODE_shr:
-	// case Bytecode.OPCODE_is:
-	// writeInfixLocations((Location<Bytecode.Operator>) expr);
-	// break;
-	// case Bytecode.OPCODE_varaccess:
-	// writeVariableAccess((Location<VariableAccess>) expr);
-	// break;
-	// default:
-	// throw new IllegalArgumentException("unknown bytecode encountered: " +
-	// expr.getBytecode());
-	// }
-	// }
-	//
-	// private void writeArrayLength(Location<Bytecode.Operator> expr) {
-	// writeExpression(expr.getOperand(0));
-	// out.print(".length");
-	// }
-	//
-	// private void writeArrayIndex(Location<Bytecode.Operator> expr) {
-	// writeExpression(expr.getOperand(0));
-	// out.print("[");
-	// writeExpression(expr.getOperand(1));
-	// out.print("]");
-	// }
-	//
-	// private void writeArrayInitialiser(Location<Bytecode.Operator> expr) {
-	// Location<?>[] operands = expr.getOperands();
-	// out.print("new ");
-	// writeType(expr.getType());
-	// out.print("{");
-	// for (int i = 0; i != operands.length; ++i) {
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// writeExpression(operands[i]);
-	// }
-	// out.print("}");
-	// }
-	//
-	// private void writeArrayGenerator(Location<Bytecode.Operator> expr) {
-	// out.print("[");
-	// writeExpression(expr.getOperand(0));
-	// out.print(" ; ");
-	// writeExpression(expr.getOperand(1));
-	// out.print("]");
-	// }
-	//
-	// private void writeConvert(Location<Bytecode.Convert> expr) {
-	// out.print("(");
-	// writeType(expr.getType());
-	// out.print(") ");
-	// writeExpression(expr.getOperand(0));
-	// }
-	//
-	// private void writeConst(Location<Bytecode.Const> expr) {
-	// out.print(expr.getBytecode().constant());
-	// }
-	//
-	// private void writeFieldLoad(Location<Bytecode.FieldLoad> expr) {
-	// writeBracketedExpression(expr.getOperand(0));
-	// out.print("." + expr.getBytecode().fieldName());
-	// }
-	//
-	// private void writeIndirectInvoke(Location<Bytecode.IndirectInvoke> expr)
-	// {
-	// Location<?>[] operands = expr.getOperands();
-	// writeExpression(operands[0]);
-	// out.print("(");
-	// for (int i = 1; i != operands.length; ++i) {
-	// if (i != 1) {
-	// out.print(", ");
-	// }
-	// writeExpression(operands[i]);
-	// }
-	// out.print(")");
-	// }
-	//
-	// private void writeInvoke(Location<Bytecode.Invoke> expr) {
-	// out.print(expr.getBytecode().name() + "(");
-	// Location<?>[] operands = expr.getOperands();
-	// for (int i = 0; i != operands.length; ++i) {
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// writeExpression(operands[i]);
-	// }
-	// out.print(")");
-	// }
-	//
-	// @SuppressWarnings("unchecked")
-	// private void writeLambda(Location<Bytecode.Lambda> expr) {
-	// out.print("&[");
-	// Location<?>[] environment = expr.getOperandGroup(SyntaxTree.ENVIRONMENT);
-	// for (int i = 0; i != environment.length; ++i) {
-	// Location<VariableDeclaration> var = (Location<VariableDeclaration>)
-	// environment[i];
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// out.print(var.getType());
-	// out.print(" ");
-	// out.print(var.getBytecode().getName());
-	// }
-	// out.print("](");
-	// Location<?>[] parameters = expr.getOperandGroup(SyntaxTree.PARAMETERS);
-	// for (int i = 0; i != parameters.length; ++i) {
-	// Location<VariableDeclaration> var = (Location<VariableDeclaration>)
-	// parameters[i];
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// out.print(var.getType());
-	// out.print(" ");
-	// out.print(var.getBytecode().getName());
-	// }
-	// out.print(" -> ");
-	// writeExpression(expr.getOperand(0));
-	// out.print(")");
-	// }
-	//
-	// private void writeRecordConstructor(Location<Bytecode.Operator> expr) {
-	// Type.EffectiveRecord t = (Type.EffectiveRecord) expr.getType();
-	// String[] fields = t.getFieldNames();
-	// Location<?>[] operands = expr.getOperands();
-	// out.print("{");
-	// for (int i = 0; i != operands.length; ++i) {
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// out.print(fields[i]);
-	// out.print(" ");
-	// writeExpression(operands[i]);
-	// }
-	// out.print("}");
-	// }
-	//
-	// private void writeNewObject(Location<Bytecode.Operator> expr) {
-	// out.print("new ");
-	// writeExpression(expr.getOperand(0));
-	// }
-	//
-	// private void writePrefixLocations(Location<Bytecode.Operator> expr) {
-	// // Prefix operators
-	// out.print(opcode(expr.getBytecode().kind()));
-	// writeBracketedExpression(expr.getOperand(0));
-	// }
-	//
-	// private void writeInfixLocations(Location<Bytecode.Operator> c) {
-	// writeBracketedExpression(c.getOperand(0));
-	// out.print(" ");
-	// out.print(opcode(c.getBytecode().kind()));
-	// out.print(" ");
-	// writeBracketedExpression(c.getOperand(1));
-	//
-	// }
-	//
-	// @SuppressWarnings("unchecked")
-	// private void writeQuantifier(Location<Bytecode.Quantifier> c) {
-	// out.print(quantifierKind(c));
-	// out.print(" { ");
-	// for (int i = 0; i != c.numberOfOperandGroups(); ++i) {
-	// Location<?>[] range = c.getOperandGroup(i);
-	// if (i != 0) {
-	// out.print(", ");
-	// }
-	// Location<VariableDeclaration> v = (Location<VariableDeclaration>)
-	// range[SyntaxTree.VARIABLE];
-	// out.print(v.getBytecode().getName());
-	// out.print(" in ");
-	// writeExpression(range[SyntaxTree.START]);
-	// out.print("..");
-	// writeExpression(range[SyntaxTree.END]);
-	// }
-	// out.print(" | ");
-	// writeExpression(c.getOperand(SyntaxTree.CONDITION));
-	// out.print(" } ");
-	// }
-	//
-	// private String quantifierKind(Location<Bytecode.Quantifier> c) {
-	// switch (c.getOpcode()) {
-	// case Bytecode.OPCODE_some:
-	// return "some";
-	// case Bytecode.OPCODE_all:
-	// return "all";
-	// }
-	// throw new IllegalArgumentException();
-	// }
-	//
-	// private boolean needsBrackets(Bytecode e) {
-	// switch (e.getOpcode()) {
-	// case Bytecode.OPCODE_convert:
-	// case Bytecode.OPCODE_add:
-	// case Bytecode.OPCODE_sub:
-	// case Bytecode.OPCODE_mul:
-	// case Bytecode.OPCODE_div:
-	// case Bytecode.OPCODE_rem:
-	// case Bytecode.OPCODE_eq:
-	// case Bytecode.OPCODE_ne:
-	// case Bytecode.OPCODE_lt:
-	// case Bytecode.OPCODE_le:
-	// case Bytecode.OPCODE_gt:
-	// case Bytecode.OPCODE_ge:
-	// case Bytecode.OPCODE_logicaland:
-	// case Bytecode.OPCODE_logicalor:
-	// case Bytecode.OPCODE_bitwiseor:
-	// case Bytecode.OPCODE_bitwisexor:
-	// case Bytecode.OPCODE_bitwiseand:
-	// case Bytecode.OPCODE_shl:
-	// case Bytecode.OPCODE_shr:
-	// case Bytecode.OPCODE_is:
-	// case Bytecode.OPCODE_newobject:
-	// case Bytecode.OPCODE_dereference:
-	// return true;
-	// }
-	// return false;
-	// }
-	//
-	// public void writeModifiers(List<Modifier> modifiers) {
-	// for(int i=0;i!=modifiers.size();++i) {
-	// out.print(modifiers.get(i));
-	// out.print(" ");
-	// }
-	// }
-	//
-	// public void writeType(Type type) {
-	// String cType = typeMap.get(type);
-	// if (cType != null) {
-	// out.print(cType);
-	// } else if(type instanceof Type.Nominal) {
-	// try {
-	// Type.Nominal tn = (Type.Nominal) type;
-	// NameID nid = tn.name();
-	// WyilFile f = project.get(nid.module(), WyilFile.ContentType).read();
-	// WyilFile.Type decl = f.type(nid.name());
-	// if(decl.type() instanceof Type.Record) {
-	// out.print(nid.name());
-	// } else {
-	// writeType(decl.type());
-	// }
-	// } catch (IOException e) {
-	// e.printStackTrace();
-	// }
-	// } else if(type instanceof Type.Union || type instanceof Type.Intersection
-	// || type instanceof Type.Negation) {
-	// out.print("Object");
-	// } else if (type instanceof Type.Array) {
-	// Type.Array arrT = (Type.Array) type;
-	// writeType(arrT.element());
-	// out.print("[]");
-	// } else {
-	// throw new IllegalArgumentException("Type not supported: " + type);
-	// }
-	// }
+	private JavaFile.Term translateExpression(Location<?> expr) {
+		switch (expr.getOpcode()) {
+		case Bytecode.OPCODE_arraylength:
+		case Bytecode.OPCODE_arrayindex:
+		case Bytecode.OPCODE_array:
+		case Bytecode.OPCODE_arraygen:
+		case Bytecode.OPCODE_add:
+		case Bytecode.OPCODE_sub:
+		case Bytecode.OPCODE_mul:
+		case Bytecode.OPCODE_div:
+		case Bytecode.OPCODE_rem:
+		case Bytecode.OPCODE_eq:
+		case Bytecode.OPCODE_ne:
+		case Bytecode.OPCODE_lt:
+		case Bytecode.OPCODE_le:
+		case Bytecode.OPCODE_gt:
+		case Bytecode.OPCODE_ge:
+		case Bytecode.OPCODE_logicaland:
+		case Bytecode.OPCODE_logicalor:
+		case Bytecode.OPCODE_bitwiseor:
+		case Bytecode.OPCODE_bitwisexor:
+		case Bytecode.OPCODE_bitwiseand:
+		case Bytecode.OPCODE_shl:
+		case Bytecode.OPCODE_shr:
+		case Bytecode.OPCODE_is:
+		case Bytecode.OPCODE_dereference:
+		case Bytecode.OPCODE_logicalnot:
+		case Bytecode.OPCODE_neg:
+		case Bytecode.OPCODE_newobject:
+		case Bytecode.OPCODE_bitwiseinvert:
+			return translateOperator((Location<Bytecode.Operator>) expr);
+		case Bytecode.OPCODE_convert:
+			return translateConvert((Location<Bytecode.Convert>) expr);
+		case Bytecode.OPCODE_const:
+			return translateConst((Location<Bytecode.Const>) expr);
+		case Bytecode.OPCODE_fieldload:
+			return translateFieldLoad((Location<Bytecode.FieldLoad>) expr);
+		case Bytecode.OPCODE_indirectinvoke:
+			return translateIndirectInvoke((Location<Bytecode.IndirectInvoke>) expr);
+		case Bytecode.OPCODE_invoke:
+			return translateInvoke((Location<Bytecode.Invoke>) expr);
+		case Bytecode.OPCODE_lambda:
+			return translateLambda((Location<Bytecode.Lambda>) expr);
+		case Bytecode.OPCODE_record:
+			return translateRecordConstructor((Location<Bytecode.Operator>) expr);
+		case Bytecode.OPCODE_all:
+		case Bytecode.OPCODE_some:
+			return translateQuantifier((Location<Bytecode.Quantifier>) expr);
+		case Bytecode.OPCODE_varaccess:
+			return translateVariableAccess((Location<Bytecode.VariableAccess>) expr);
+		default:
+			throw new IllegalArgumentException("unknown bytecode encountered: " +
+					expr.getBytecode());
+		}
+	}
+
+	private JavaFile.Term translateOperator(Location<Bytecode.Operator> expr) {
+		List<JavaFile.Term> children = new ArrayList<>();
+		for(int i=0;i!=expr.numberOfOperands();++i) {
+			children.add(translateExpression(expr.getOperand(i)));
+		}
+		JavaFile.Operator.Kind kind = translateOpcode(expr.getBytecode().kind());
+		return new JavaFile.Operator(kind,children);
+	}
+
+	private JavaFile.Term translateConvert(Location<Bytecode.Convert> expr) {
+//		out.print("(");
+//		writeType(expr.getType());
+//		out.print(") ");
+//		writeExpression(expr.getOperand(0));
+		return null;
+	}
+
+	private JavaFile.Term translateConst(Location<Bytecode.Const> expr) {
+		Constant c = expr.getBytecode().constant();
+		Object value;
+		if(c instanceof Constant.Null) {
+			value = null;
+		} else if(c instanceof Constant.Bool) {
+			Constant.Bool bc = (Constant.Bool) c;
+			value = bc.value();
+		} else if(c instanceof Constant.Integer) {
+			Constant.Integer bc = (Constant.Integer) c;
+			// FIXME: bug for large integer values here
+			BigInteger bi = bc.value();
+			long lv = bi.longValue();
+			if(lv >= Integer.MIN_VALUE && lv < Integer.MAX_VALUE) {
+				value = (int) lv;
+			} else  {
+				value = lv;
+			}
+		} else {
+			throw new IllegalArgumentException("GOT HERE");
+		}
+		return new JavaFile.Constant(value);
+	}
+
+	private JavaFile.Term translateFieldLoad(Location<Bytecode.FieldLoad> expr) {
+//		writeBracketedExpression(expr.getOperand(0));
+//		out.print("." + expr.getBytecode().fieldName());
+		return null;
+	}
+
+	private JavaFile.Term translateIndirectInvoke(Location<Bytecode.IndirectInvoke> expr)
+	{
+//		Location<?>[] operands = expr.getOperands();
+//		writeExpression(operands[0]);
+//		out.print("(");
+//		for (int i = 1; i != operands.length; ++i) {
+//			if (i != 1) {
+//				out.print(", ");
+//			}
+//			writeExpression(operands[i]);
+//		}
+//		out.print(")");
+		return null;
+	}
+
+	private JavaFile.Term translateInvoke(Location<Bytecode.Invoke> expr) {
+//		out.print(expr.getBytecode().name() + "(");
+//		Location<?>[] operands = expr.getOperands();
+//		for (int i = 0; i != operands.length; ++i) {
+//			if (i != 0) {
+//				out.print(", ");
+//			}
+//			writeExpression(operands[i]);
+//		}
+//		out.print(")");
+		return null;
+	}
+
+	@SuppressWarnings("unchecked")
+	private JavaFile.Term translateLambda(Location<Bytecode.Lambda> expr) {
+//		out.print("&[");
+//		Location<?>[] environment = expr.getOperandGroup(SyntaxTree.ENVIRONMENT);
+//		for (int i = 0; i != environment.length; ++i) {
+//			Location<VariableDeclaration> var = (Location<VariableDeclaration>) environment[i];
+//			if (i != 0) {
+//				out.print(", ");
+//			}
+//			out.print(var.getType());
+//			out.print(" ");
+//			out.print(var.getBytecode().getName());
+//		}
+//		out.print("](");
+//		Location<?>[] parameters = expr.getOperandGroup(SyntaxTree.PARAMETERS);
+//		for (int i = 0; i != parameters.length; ++i) {
+//			Location<VariableDeclaration> var = (Location<VariableDeclaration>) parameters[i];
+//			if (i != 0) {
+//				out.print(", ");
+//			}
+//			out.print(var.getType());
+//			out.print(" ");
+//			out.print(var.getBytecode().getName());
+//		}
+//		out.print(" -> ");
+//		writeExpression(expr.getOperand(0));
+//		out.print(")");
+		return null;
+	}
+
+	private JavaFile.Term translateRecordConstructor(Location<Bytecode.Operator> expr) {
+//		Type.EffectiveRecord t = (Type.EffectiveRecord) expr.getType();
+//		String[] fields = t.getFieldNames();
+//		Location<?>[] operands = expr.getOperands();
+//		out.print("{");
+//		for (int i = 0; i != operands.length; ++i) {
+//			if (i != 0) {
+//				out.print(", ");
+//			}
+//			out.print(fields[i]);
+//			out.print(" ");
+//			writeExpression(operands[i]);
+//		}
+//		out.print("}");
+		return null;
+	}
+
+	@SuppressWarnings("unchecked")
+	private JavaFile.Term translateQuantifier(Location<Bytecode.Quantifier> c) {
+//		out.print(quantifierKind(c));
+//		out.print(" { ");
+//		for (int i = 0; i != c.numberOfOperandGroups(); ++i) {
+//			Location<?>[] range = c.getOperandGroup(i);
+//			if (i != 0) {
+//				out.print(", ");
+//			}
+//			Location<VariableDeclaration> v = (Location<VariableDeclaration>) range[SyntaxTree.VARIABLE];
+//			out.print(v.getBytecode().getName());
+//			out.print(" in ");
+//			writeExpression(range[SyntaxTree.START]);
+//			out.print("..");
+//			writeExpression(range[SyntaxTree.END]);
+//		}
+//		out.print(" | ");
+//		writeExpression(c.getOperand(SyntaxTree.CONDITION));
+//		out.print(" } ");
+		return null;
+	}
+
+	private JavaFile.Term translateVariableAccess(Location<Bytecode.VariableAccess> expr) {
+		Location<VariableDeclaration> vd = getVariableDeclaration(expr.getOperand(0));
+		JavaFile.Term t = new JavaFile.VariableAccess(vd.getBytecode().getName());
+		JavaFile.Type type = translateType(expr.getType());
+		if(!isCopyable(type)) {
+			throw new RuntimeException("GOT HERE");
+		}
+		return t;
+	}
 
 	private static void addModifiers(JavaFile.Declaration d, List<Modifier> modifiers) {
 		for (Modifier m : modifiers) {
@@ -945,11 +591,11 @@ public class JavaCompileTask implements Build.Task {
 	 * @param types
 	 * @return
 	 */
-	private JavaFile.Type convertReturns(Type... types) {
+	private JavaFile.Type translateReturnTypes(Type... types) {
 		if (types.length == 0) {
 			return JavaFile.VOID;
 		} else if (types.length == 1) {
-			return convert(types[0]);
+			return translateType(types[0]);
 		} else {
 			throw new RuntimeException("Got here");
 		}
@@ -964,13 +610,13 @@ public class JavaCompileTask implements Build.Task {
 	 *
 	 * @param type
 	 */
-	private JavaFile.Type convert(Type type) {
+	private JavaFile.Type translateType(Type type) {
 		JavaFile.Type jtype = typeMap.get(type);
 		if (jtype != null) {
 			return jtype;
 		} else if (type instanceof Type.Array) {
 			Type.Array arrT = (Type.Array) type;
-			return new JavaFile.Array(convert(arrT.element()));
+			return new JavaFile.Array(translateType(arrT.element()));
 		} else if (type instanceof Type.Nominal) {
 			try {
 				Type.Nominal tn = (Type.Nominal) type;
@@ -980,7 +626,7 @@ public class JavaCompileTask implements Build.Task {
 				if (decl.type() instanceof Type.Record) {
 					return new JavaFile.Reference(tn.name().name());
 				} else {
-					return convert(decl.type());
+					return translateType(decl.type());
 				}
 			} catch (IOException e) {
 				throw new IllegalArgumentException(e);
@@ -1018,57 +664,71 @@ public class JavaCompileTask implements Build.Task {
 		}
 	};
 
-	private static String opcode(Bytecode.OperatorKind k) {
+	/**
+	 * Return true if the type in question can be copied directly. More
+	 * specifically, if a bitwise copy of the value is sufficient to fully copy
+	 * it. In general, this is true for primitive data types in Java. But, for
+	 * array types or general class types, it is not true (since these are
+	 * references into the heap). As an exception, class types which are known
+	 * to be immutable can be safely considered as copyable.
+	 *
+	 * @param type
+	 * @return
+	 */
+	private static boolean isCopyable(JavaFile.Type type) {
+		if (type instanceof JavaFile.Primitive) {
+			return true;
+		} else {
+			// FIXME: could do better here, e.g. for immutable reference types
+			return false;
+		}
+	}
+
+	private static JavaFile.Operator.Kind translateOpcode(Bytecode.OperatorKind k) {
 		switch (k) {
 		case NEG:
-			return "-";
+			return JavaFile.Operator.Kind.NEG;
 		case NOT:
-			return "!";
-		case BITWISEINVERT:
-			return "~";
-		case DEREFERENCE:
-			return "*";
+			return JavaFile.Operator.Kind.NOT;
 		// Binary
 		case ADD:
-			return "+";
+			return JavaFile.Operator.Kind.ADD;
 		case SUB:
-			return "-";
+			return JavaFile.Operator.Kind.SUB;
 		case MUL:
-			return "*";
+			return JavaFile.Operator.Kind.MUL;
 		case DIV:
-			return "/";
+			return JavaFile.Operator.Kind.DIV;
 		case REM:
-			return "%";
+			return JavaFile.Operator.Kind.REM;
 		case EQ:
-			return "==";
+			return JavaFile.Operator.Kind.EQ;
 		case NEQ:
-			return "!=";
+			return JavaFile.Operator.Kind.NEQ;
 		case LT:
-			return "<";
+			return JavaFile.Operator.Kind.LT;
 		case LTEQ:
-			return "<=";
+			return JavaFile.Operator.Kind.LTEQ;
 		case GT:
-			return ">";
+			return JavaFile.Operator.Kind.GT;
 		case GTEQ:
-			return ">=";
+			return JavaFile.Operator.Kind.GTEQ;
 		case AND:
-			return "&&";
+			return JavaFile.Operator.Kind.AND;
 		case OR:
-			return "||";
+			return JavaFile.Operator.Kind.OR;
 		case BITWISEOR:
-			return "|";
+			return JavaFile.Operator.Kind.BITWISEOR;
 		case BITWISEXOR:
-			return "^";
+			return JavaFile.Operator.Kind.BITWISEXOR;
 		case BITWISEAND:
-			return "&";
+			return JavaFile.Operator.Kind.BITWISEAND;
+		case BITWISEINVERT:
+			return JavaFile.Operator.Kind.BITWISEINVERT;
 		case LEFTSHIFT:
-			return "<<";
+			return JavaFile.Operator.Kind.LEFTSHIFT;
 		case RIGHTSHIFT:
-			return ">>";
-		case IS:
-			return "is";
-		case NEW:
-			return "new";
+			return JavaFile.Operator.Kind.RIGHTSHIFT;
 		default:
 			throw new IllegalArgumentException("unknown operator kind : " + k);
 		}
