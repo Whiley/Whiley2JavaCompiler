@@ -181,6 +181,24 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class ArrayAccess implements Term {
+		private Term src;
+		private Term index;
+
+		public ArrayAccess(Term src, Term index) {
+			this.src = src;
+			this.index = index;
+		}
+
+		public Term getSource() {
+			return src;
+		}
+
+		public Term getIndex() {
+			return index;
+		}
+	}
+
 	public static class Assert implements Term {
 		private Term operand;
 
@@ -212,6 +230,25 @@ public class JavaFile extends AbstractCompilationUnit {
 
 		public Object getValue() {
 			return value;
+		}
+	}
+
+
+	public static class FieldAccess implements Term {
+		private Term src;
+		private String field;
+
+		public FieldAccess(Term src, String field) {
+			this.src = src;
+			this.field = field;
+		}
+
+		public Term getSource() {
+			return src;
+		}
+
+		public String getField() {
+			return field;
 		}
 	}
 
@@ -267,6 +304,24 @@ public class JavaFile extends AbstractCompilationUnit {
 
 		public List<Term> getArguments() {
 			return arguments;
+		}
+	}
+
+	public static class New implements Term {
+		private Type type;
+		private List<Term> initialisers;
+
+		public New(Type type, List<Term> initialisers) {
+			this.type = type;
+			this.initialisers = new ArrayList<>(initialisers);
+		}
+
+		public Type getType() {
+			return type;
+		}
+
+		public List<Term> getInitialisers() {
+			return initialisers;
 		}
 	}
 

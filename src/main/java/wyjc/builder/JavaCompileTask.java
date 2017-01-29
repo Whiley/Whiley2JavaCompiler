@@ -274,7 +274,8 @@ public class JavaCompileTask implements Build.Task {
 			method.getParameters().add(new Pair<>(pt, pd.getBytecode().getName()));
 		}
 		//
-		// FIXME: preconditions / postconditions?
+		// FIXME: should provide support for checking preconditions /
+		// postconditions here. These can be implemented as runtime checks.
 		//
 		method.setBody(translateBlock(decl.getBody()));
 		parent.getDeclarations().add(method);
@@ -359,10 +360,10 @@ public class JavaCompileTask implements Build.Task {
 		JavaFile.Term operand = translateExpression(stmt.getOperand(0));
 		JavaFile.Block trueBranch = translateBlock(stmt.getBlock(0));
 		JavaFile.Block falseBranch = null;
-		if(stmt.numberOfBlocks() > 1) {
+		if (stmt.numberOfBlocks() > 1) {
 			falseBranch = translateBlock(stmt.getBlock(1));
 		}
-		return new JavaFile.If(operand,trueBranch,falseBranch);
+		return new JavaFile.If(operand, trueBranch, falseBranch);
 	}
 
 	private JavaFile.Term translateVariableDeclaration(Location<Bytecode.VariableDeclaration> stmt) {
@@ -396,10 +397,6 @@ public class JavaCompileTask implements Build.Task {
 	// @SuppressWarnings("unchecked")
 	private JavaFile.Term translateExpression(Location<?> expr) {
 		switch (expr.getOpcode()) {
-		case Bytecode.OPCODE_arraylength:
-		case Bytecode.OPCODE_arrayindex:
-		case Bytecode.OPCODE_array:
-		case Bytecode.OPCODE_arraygen:
 		case Bytecode.OPCODE_add:
 		case Bytecode.OPCODE_sub:
 		case Bytecode.OPCODE_mul:
@@ -425,6 +422,14 @@ public class JavaCompileTask implements Build.Task {
 		case Bytecode.OPCODE_newobject:
 		case Bytecode.OPCODE_bitwiseinvert:
 			return translateOperator((Location<Bytecode.Operator>) expr);
+		case Bytecode.OPCODE_arraylength:
+			return translateArrayLength((Location<Bytecode.Operator>) expr);
+		case Bytecode.OPCODE_arrayindex:
+			return translateArrayAccess((Location<Bytecode.Operator>) expr);
+		case Bytecode.OPCODE_array:
+			return translateArrayInitialiser((Location<Bytecode.Operator>) expr);
+		case Bytecode.OPCODE_arraygen:
+			return translateArrayGenerator((Location<Bytecode.Operator>) expr);
 		case Bytecode.OPCODE_convert:
 			return translateConvert((Location<Bytecode.Convert>) expr);
 		case Bytecode.OPCODE_const:
@@ -457,6 +462,31 @@ public class JavaCompileTask implements Build.Task {
 		JavaFile.Operator.Kind kind = translateOpcode(expr.getBytecode().kind());
 		return new JavaFile.Operator(kind, children);
 	}
+
+	private JavaFile.Term translateArrayAccess(Location<Bytecode.Operator> expr) {
+		JavaFile.Term src = translateExpression(expr.getOperand(0));
+		JavaFile.Term index = translateExpression(expr.getOperand(1));
+		return new JavaFile.ArrayAccess(src,index);
+	}
+
+	private JavaFile.Term translateArrayGenerator(Location<Bytecode.Operator> expr) {
+		throw new IllegalArgumentException("IMPLEMENT ME");
+	}
+
+	private JavaFile.Term translateArrayInitialiser(Location<Bytecode.Operator> expr) {
+		List<JavaFile.Term> children = new ArrayList<>();
+		for (int i = 0; i != expr.numberOfOperands(); ++i) {
+			children.add(translateExpression(expr.getOperand(i)));
+		}
+		JavaFile.Type type = translateType(expr.getType());
+		return new JavaFile.New(type,children);
+	}
+
+	private JavaFile.Term translateArrayLength(Location<Bytecode.Operator> expr) {
+		JavaFile.Term src = translateExpression(expr.getOperand(0));
+		return new JavaFile.FieldAccess(src,"length");
+	}
+
 
 	private JavaFile.Term translateConvert(Location<Bytecode.Convert> expr) {
 		// out.print("(");

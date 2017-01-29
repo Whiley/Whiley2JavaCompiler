@@ -166,10 +166,14 @@ public class JavaFileWriter {
 	}
 
 	private void writeExpression(JavaFile.Term term) {
-		if(term instanceof JavaFile.Constant) {
+		if(term instanceof JavaFile.ArrayAccess) {
+			writeArrayAccess((JavaFile.ArrayAccess) term);
+		} else if(term instanceof JavaFile.Constant) {
 			writeConstant((JavaFile.Constant) term);
 		} else if(term instanceof JavaFile.Invoke) {
 			writeInvoke((JavaFile.Invoke) term);
+		} else if(term instanceof JavaFile.New) {
+			writeNew((JavaFile.New) term);
 		} else if(term instanceof JavaFile.Operator) {
 			writeOperator((JavaFile.Operator) term);
 		} else if(term instanceof JavaFile.VariableAccess) {
@@ -177,6 +181,13 @@ public class JavaFileWriter {
 		} else {
 			throw new IllegalArgumentException("unknown term encountered: " + term);
 		}
+	}
+
+	private void writeArrayAccess(JavaFile.ArrayAccess term) {
+		writeExpression(term.getSource());
+		out.print("[");
+		writeExpression(term.getIndex());
+		out.print("]");
 	}
 
 	private void writeConstant(JavaFile.Constant term) {
@@ -285,6 +296,17 @@ public class JavaFileWriter {
 		out.print(term.getName());
 	}
 
+	private void writeNew(JavaFile.New term) {
+		out.print("new ");
+		writeType(term.getType());
+		List<JavaFile.Term> initialisers = term.getInitialisers();
+		if(initialisers != null) {
+			out.print("{");
+			writeArguments(initialisers);
+			out.print("}");
+		}
+	}
+
 	/**
 	 * Print out a comma-separated list of argument expressions.
 	 *
@@ -298,6 +320,7 @@ public class JavaFileWriter {
 			writeExpression(arguments.get(i));
 		}
 	}
+
 
 	private void writeType(JavaFile.Type type) {
 		if(type instanceof JavaFile.Primitive) {
