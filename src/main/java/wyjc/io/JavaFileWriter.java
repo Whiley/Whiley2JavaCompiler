@@ -22,11 +22,16 @@ public class JavaFileWriter {
 	}
 
 	public void write(JavaFile file) {
+		writeImports();
 		for(JavaFile.Declaration d : file.getDeclarations()) {
 			write(0,(JavaFile.Declaration)d);
 		}
 		out.flush();
 		out.close();
+	}
+
+	private void writeImports() {
+		out.println("import java.math.BigInteger;");
 	}
 
 	private void write(int indent, JavaFile.Declaration d) {

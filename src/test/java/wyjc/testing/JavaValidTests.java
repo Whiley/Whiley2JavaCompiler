@@ -156,17 +156,21 @@ public class JavaValidTests {
 			fail("Test failed to compile!");
 		}
 		// compile the generated Java Program.
-		compileJava2Bytecode(WHILEY_SRC_DIR,whileyFilename);
- 		// execute the generated Java Program.
- 		String CLASSPATH=System.getProperty("java.class.path");
-		// FIXME: if generated classfiles were dumped into target/classes, then
-		// we wouldn't need to append the following onto CLASSPATH.
- 		CLASSPATH = WHILEY_SRC_DIR + File.pathSeparator + CLASSPATH;
- 		String output = exec(CLASSPATH,".","wyjc.testing.RuntimeValidTests",name);
- 		if(!output.equals("")) {
- 			System.out.println(output);
- 			fail("unexpected output!");
- 		}
+		if (compileJava2Bytecode(WHILEY_SRC_DIR, name + ".java") == null) {
+			fail("unable to compile Java file");
+		} else {
+			// execute the generated Java Program.
+			String CLASSPATH = System.getProperty("java.class.path");
+			// FIXME: if generated classfiles were dumped into target/classes,
+			// then
+			// we wouldn't need to append the following onto CLASSPATH.
+			CLASSPATH = WHILEY_SRC_DIR + File.pathSeparator + CLASSPATH;
+			String output = exec(CLASSPATH, ".", "wyjc.testing.RuntimeValidTests", name);
+			if (!output.equals("")) {
+				System.out.println(output);
+				fail("unexpected output!");
+			}
+		}
  	}
 
  	/**
@@ -201,8 +205,35 @@ public class JavaValidTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static String compileJava2Bytecode(String whileydir, String... args) throws IOException {
-		throw new IllegalArgumentException("implement Java compiler");
+	public static String compileJava2Bytecode(String whileydir, String javaFilename) throws IOException {
+		try {
+			whileydir = whileydir.replace('/', File.separatorChar);
+			String tmp = "javac " + javaFilename;
+			Process p = Runtime.getRuntime().exec(tmp, null, new File(whileydir));
+
+			StringBuffer syserr = new StringBuffer();
+			StringBuffer sysout = new StringBuffer();
+			new TestUtils.StreamGrabber(p.getErrorStream(), syserr);
+			new TestUtils.StreamGrabber(p.getInputStream(), sysout);
+			int exitCode = p.waitFor();
+			System.out.println(sysout.toString());
+			if (exitCode != 0) {
+				System.err
+						.println("============================================================");
+				System.err.println(javaFilename);
+				System.err
+						.println("============================================================");
+				System.err.println(syserr);
+				return null;
+			} else {
+				return sysout.toString();
+			}
+		} catch (Exception ex) {
+			ex.printStackTrace();
+			fail("Problem running compiled test");
+		}
+
+		return null;
 	}
 
 	/**
