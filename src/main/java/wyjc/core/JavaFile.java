@@ -221,7 +221,8 @@ public class JavaFile extends AbstractCompilationUnit {
 		private Object value;
 
 		public Constant(Object value) {
-			if (value == null || value instanceof Boolean || value instanceof Integer || value instanceof String) {
+			if (value == null || value instanceof Boolean || value instanceof Integer || value instanceof Long
+					|| value instanceof String) {
 				this.value = value;
 			} else {
 				throw new IllegalArgumentException("invalid constant value: " + value);
@@ -285,6 +286,12 @@ public class JavaFile extends AbstractCompilationUnit {
 			this.receiver = receiver;
 			this.path = new ArrayList<>();
 			this.path.add(name);
+			this.arguments = Arrays.asList(arguments);
+		}
+
+		public Invoke(Term receiver, String[] path, Term... arguments) {
+			this.receiver = receiver;
+			this.path = Arrays.asList(path);
 			this.arguments = Arrays.asList(arguments);
 		}
 

@@ -12,6 +12,7 @@ import java.util.*;
 
 import wybs.lang.Build;
 import wybs.lang.NameID;
+import wybs.util.ResolveError;
 import wybs.lang.Build.Graph;
 import wycc.util.Logger;
 import wycc.util.Pair;
@@ -396,61 +397,65 @@ public class JavaCompileTask implements Build.Task {
 
 	// @SuppressWarnings("unchecked")
 	private JavaFile.Term translateExpression(Location<?> expr) {
-		switch (expr.getOpcode()) {
-		case Bytecode.OPCODE_add:
-		case Bytecode.OPCODE_sub:
-		case Bytecode.OPCODE_mul:
-		case Bytecode.OPCODE_div:
-		case Bytecode.OPCODE_rem:
-		case Bytecode.OPCODE_eq:
-		case Bytecode.OPCODE_ne:
-		case Bytecode.OPCODE_lt:
-		case Bytecode.OPCODE_le:
-		case Bytecode.OPCODE_gt:
-		case Bytecode.OPCODE_ge:
-		case Bytecode.OPCODE_logicaland:
-		case Bytecode.OPCODE_logicalor:
-		case Bytecode.OPCODE_bitwiseor:
-		case Bytecode.OPCODE_bitwisexor:
-		case Bytecode.OPCODE_bitwiseand:
-		case Bytecode.OPCODE_shl:
-		case Bytecode.OPCODE_shr:
-		case Bytecode.OPCODE_is:
-		case Bytecode.OPCODE_dereference:
-		case Bytecode.OPCODE_logicalnot:
-		case Bytecode.OPCODE_neg:
-		case Bytecode.OPCODE_newobject:
-		case Bytecode.OPCODE_bitwiseinvert:
-			return translateOperator((Location<Bytecode.Operator>) expr);
-		case Bytecode.OPCODE_arraylength:
-			return translateArrayLength((Location<Bytecode.Operator>) expr);
-		case Bytecode.OPCODE_arrayindex:
-			return translateArrayAccess((Location<Bytecode.Operator>) expr);
-		case Bytecode.OPCODE_array:
-			return translateArrayInitialiser((Location<Bytecode.Operator>) expr);
-		case Bytecode.OPCODE_arraygen:
-			return translateArrayGenerator((Location<Bytecode.Operator>) expr);
-		case Bytecode.OPCODE_convert:
-			return translateConvert((Location<Bytecode.Convert>) expr);
-		case Bytecode.OPCODE_const:
-			return translateConst((Location<Bytecode.Const>) expr);
-		case Bytecode.OPCODE_fieldload:
-			return translateFieldLoad((Location<Bytecode.FieldLoad>) expr);
-		case Bytecode.OPCODE_indirectinvoke:
-			return translateIndirectInvoke((Location<Bytecode.IndirectInvoke>) expr);
-		case Bytecode.OPCODE_invoke:
-			return translateInvoke((Location<Bytecode.Invoke>) expr);
-		case Bytecode.OPCODE_lambda:
-			return translateLambda((Location<Bytecode.Lambda>) expr);
-		case Bytecode.OPCODE_record:
-			return translateRecordConstructor((Location<Bytecode.Operator>) expr);
-		case Bytecode.OPCODE_all:
-		case Bytecode.OPCODE_some:
-			return translateQuantifier((Location<Bytecode.Quantifier>) expr);
-		case Bytecode.OPCODE_varaccess:
-			return translateVariableAccess((Location<Bytecode.VariableAccess>) expr);
-		default:
-			throw new IllegalArgumentException("unknown bytecode encountered: " + expr.getBytecode());
+		try {
+			switch (expr.getOpcode()) {
+			case Bytecode.OPCODE_add:
+			case Bytecode.OPCODE_sub:
+			case Bytecode.OPCODE_mul:
+			case Bytecode.OPCODE_div:
+			case Bytecode.OPCODE_rem:
+			case Bytecode.OPCODE_eq:
+			case Bytecode.OPCODE_ne:
+			case Bytecode.OPCODE_lt:
+			case Bytecode.OPCODE_le:
+			case Bytecode.OPCODE_gt:
+			case Bytecode.OPCODE_ge:
+			case Bytecode.OPCODE_logicaland:
+			case Bytecode.OPCODE_logicalor:
+			case Bytecode.OPCODE_bitwiseor:
+			case Bytecode.OPCODE_bitwisexor:
+			case Bytecode.OPCODE_bitwiseand:
+			case Bytecode.OPCODE_shl:
+			case Bytecode.OPCODE_shr:
+			case Bytecode.OPCODE_is:
+			case Bytecode.OPCODE_dereference:
+			case Bytecode.OPCODE_logicalnot:
+			case Bytecode.OPCODE_neg:
+			case Bytecode.OPCODE_newobject:
+			case Bytecode.OPCODE_bitwiseinvert:
+				return translateOperator((Location<Bytecode.Operator>) expr);
+			case Bytecode.OPCODE_arraylength:
+				return translateArrayLength((Location<Bytecode.Operator>) expr);
+			case Bytecode.OPCODE_arrayindex:
+				return translateArrayAccess((Location<Bytecode.Operator>) expr);
+			case Bytecode.OPCODE_array:
+				return translateArrayInitialiser((Location<Bytecode.Operator>) expr);
+			case Bytecode.OPCODE_arraygen:
+				return translateArrayGenerator((Location<Bytecode.Operator>) expr);
+			case Bytecode.OPCODE_convert:
+				return translateConvert((Location<Bytecode.Convert>) expr);
+			case Bytecode.OPCODE_const:
+				return translateConst((Location<Bytecode.Const>) expr);
+			case Bytecode.OPCODE_fieldload:
+				return translateFieldLoad((Location<Bytecode.FieldLoad>) expr);
+			case Bytecode.OPCODE_indirectinvoke:
+				return translateIndirectInvoke((Location<Bytecode.IndirectInvoke>) expr);
+			case Bytecode.OPCODE_invoke:
+				return translateInvoke((Location<Bytecode.Invoke>) expr);
+			case Bytecode.OPCODE_lambda:
+				return translateLambda((Location<Bytecode.Lambda>) expr);
+			case Bytecode.OPCODE_record:
+				return translateRecordConstructor((Location<Bytecode.Operator>) expr);
+			case Bytecode.OPCODE_all:
+			case Bytecode.OPCODE_some:
+				return translateQuantifier((Location<Bytecode.Quantifier>) expr);
+			case Bytecode.OPCODE_varaccess:
+				return translateVariableAccess((Location<Bytecode.VariableAccess>) expr);
+			default:
+				throw new IllegalArgumentException("unknown bytecode encountered: " + expr.getBytecode());
+			}
+		} catch (ResolveError e) {
+			throw new RuntimeException("resolve error", e);
 		}
 	}
 
@@ -496,8 +501,9 @@ public class JavaCompileTask implements Build.Task {
 		return null;
 	}
 
-	private JavaFile.Term translateConst(Location<Bytecode.Const> expr) {
+	private JavaFile.Term translateConst(Location<Bytecode.Const> expr) throws ResolveError {
 		Constant c = expr.getBytecode().constant();
+		Type type = expr.getType();
 		Object value;
 		if (c instanceof Constant.Null) {
 			value = null;
@@ -506,18 +512,29 @@ public class JavaCompileTask implements Build.Task {
 			value = bc.value();
 		} else if (c instanceof Constant.Integer) {
 			Constant.Integer bc = (Constant.Integer) c;
-			// FIXME: bug for large integer values here
 			BigInteger bi = bc.value();
-			long lv = bi.longValue();
-			if (lv >= Integer.MIN_VALUE && lv < Integer.MAX_VALUE) {
-				value = (int) lv;
+			// This case is more complex because we have to manage large integer
+			// values (which do not fit as literals).
+			if(isDynamicallySized(type)) {
+				return translateLargeIntegerConstant(bi);
 			} else {
-				value = lv;
+				long lv = bi.longValue();
+				if (lv >= Integer.MIN_VALUE && lv < Integer.MAX_VALUE) {
+					value = (int) lv;
+				} else {
+					value = lv;
+				}
 			}
 		} else {
 			throw new IllegalArgumentException("GOT HERE");
 		}
 		return new JavaFile.Constant(value);
+	}
+
+	private JavaFile.Term translateLargeIntegerConstant(BigInteger constant) {
+		long lv = constant.longValue();
+		// FIXME: bug here for constants which cannot fit inside a long
+		return new JavaFile.Invoke(null, new String[] { "BigInteger", "valueOf" }, new JavaFile.Constant(lv));
 	}
 
 	private JavaFile.Term translateFieldLoad(Location<Bytecode.FieldLoad> expr) {
@@ -702,6 +719,22 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
+	public boolean isDynamicallySized(Type type) throws ResolveError {
+		// FIXME: this is basically completely broken.
+		if (type == TYPE_I8 || type == TYPE_I16 || type == TYPE_I32 || type == TYPE_I64 || type == TYPE_U8
+				|| type == TYPE_U16 || type == TYPE_U32 || type == TYPE_U64) {
+			return false;
+		} else if (typeSystem.isSubtype(Type.T_INT, type)) {
+			return true;
+		} else if(typeSystem.expandAsEffectiveArray(type) != null){
+			return true;
+		} else {
+			// FIXME: need to recursively check component types for records.
+			return false;
+		}
+	}
+
+
 	private static Type TYPE_I8 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "i8"));
 	private static Type TYPE_I16 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "i16"));
 	private static Type TYPE_I32 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "i32"));
@@ -710,6 +743,8 @@ public class JavaCompileTask implements Build.Task {
 	private static Type TYPE_U16 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "u16"));
 	private static Type TYPE_U32 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "u32"));
 	private static Type TYPE_U64 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "u64"));
+
+	private static JavaFile.Reference JAVA_MATH_BIGINTEGER = new JavaFile.Reference("BigInteger");
 
 	private static HashMap<Type, JavaFile.Type> typeMap = new HashMap<Type, JavaFile.Type>() {
 		{
@@ -724,7 +759,7 @@ public class JavaCompileTask implements Build.Task {
 			//
 			put(Type.T_BOOL, JavaFile.BOOLEAN);
 			put(Type.T_BYTE, JavaFile.BYTE);
-			put(Type.T_INT, new JavaFile.Reference("BigInteger"));
+			put(Type.T_INT, JAVA_MATH_BIGINTEGER);
 			put(Type.T_ANY, new JavaFile.Reference("Object"));
 		}
 	};
@@ -741,7 +776,7 @@ public class JavaCompileTask implements Build.Task {
 	 * @return
 	 */
 	private static boolean isCopyable(JavaFile.Type type) {
-		if (type instanceof JavaFile.Primitive) {
+		if (type instanceof JavaFile.Primitive || type == JAVA_MATH_BIGINTEGER) {
 			return true;
 		} else {
 			// FIXME: could do better here, e.g. for immutable reference types
