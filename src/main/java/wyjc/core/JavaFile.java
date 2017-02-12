@@ -163,6 +163,40 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class Constructor extends AbstractDeclaration implements Declaration {
+		private List<Pair<Type,String>> parameters = new ArrayList<>();
+		private Block body;
+
+		public Constructor(String name) {
+			super(name);
+		}
+
+		public List<Pair<Type,String>> getParameters() {
+			return parameters;
+		}
+
+		public Block getBody() {
+			return body;
+		}
+
+		public void setBody(Block block) {
+			this.body = block;
+		}
+	}
+
+	public static class Field extends AbstractDeclaration implements Declaration {
+		private Type type;
+
+		public Field(Type type, String name) {
+			super(name);
+			this.type = type;
+		}
+
+		public Type getType() {
+			return type;
+		}
+	}
+
 	/**
 	 * Represents either a statement or expression in a Java source file.
 	 *

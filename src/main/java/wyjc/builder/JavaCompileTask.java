@@ -144,8 +144,8 @@ public class JavaCompileTask implements Build.Task {
 			typeClass.getModifiers().add(JavaFile.Modifier.STATIC);
 			typeClass.getModifiers().add(JavaFile.Modifier.FINAL);
 			// Write field declartions
-			// writeFieldDeclarations(indent,recT);
-			// writeRecordConstructor(indent,decl.name(),recT);
+			writeFieldDeclarations(typeClass,recT);
+			writeRecordConstructor(typeClass,decl.name(),recT);
 			// writeRecordEquals(indent,decl.name(),recT);
 			// writeRecordHashCode(indent,decl.name(),recT);
 			// writeRecordClone(indent,decl.name(),recT);
@@ -154,43 +154,39 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
-	// private void writeFieldDeclarations(int indent, Type.Record recT) {
-	// String[] fields = recT.getFieldNames();
-	// for(int i=0;i!=recT.size();++i) {
-	// String field = fields[i];
-	// tabIndent(indent+1);
-	// out.print("public ");
-	// writeType(recT.getField(field));
-	// out.println(" " + field + ";");
-	// }
-	// out.println();
-	// }
-	//
-	// private void writeRecordConstructor(int indent, String name, Type.Record
-	// recT) {
-	// tabIndent(indent+1);
-	// out.print("public ");
-	// out.print(name);
-	// out.print("(");
-	// String[] fields = recT.getFieldNames();
-	// for(int i=0;i!=recT.size();++i) {
-	// if(i != 0) {
-	// out.print(", ");
-	// }
-	// String field = fields[i];
-	// writeType(recT.getField(field));
-	// out.print(" " + field);
-	// }
-	// out.println(") {");
-	// for(int i=0;i!=recT.size();++i) {
-	// tabIndent(indent+2);
-	// String field = fields[i];
-	// out.println("this." + field + " = " + field + ";");
-	// }
-	// tabIndent(indent+1);
-	// out.println("}");
-	// out.println();
-	// }
+	private void writeFieldDeclarations(JavaFile.Class typeClass, Type.Record recT) {
+		String[] fields = recT.getFieldNames();
+		for(int i=0;i!=recT.size();++i) {
+			String fieldName = fields[i];
+			JavaFile.Type fieldType = translateType(recT.getField(fieldName));
+			JavaFile.Field field = new JavaFile.Field(fieldType,fieldName);
+			field.getModifiers().add(JavaFile.Modifier.PRIVATE);
+			typeClass.getDeclarations().add(field);
+		}
+	}
+
+	private void writeRecordConstructor(JavaFile.Class typeClass, String name, Type.Record
+			recT) {
+		JavaFile.Constructor constructor = new JavaFile.Constructor(name);
+		List<Pair<JavaFile.Type,String>> parameters = constructor.getParameters();
+		String[] fields = recT.getFieldNames();
+		for(int i=0;i!=recT.size();++i) {
+			String fieldName = fields[i];
+			JavaFile.Type fieldType = translateType(recT.getField(fieldName));
+			parameters.add(new Pair<>(fieldType,fieldName));
+		}
+		JavaFile.Block body = new JavaFile.Block();
+		for(int i=0;i!=recT.size();++i) {
+			String fieldName = fields[i];
+			JavaFile.Term lhs = new JavaFile.FieldAccess(new JavaFile.VariableAccess("this"),fieldName);
+			JavaFile.VariableAccess rhs = new JavaFile.VariableAccess(fieldName);
+			JavaFile.Assignment initialiser = new JavaFile.Assignment(lhs, rhs);
+			body.getTerms().add(initialiser);
+		}
+		constructor.setBody(body);
+		constructor.getModifiers().add(JavaFile.Modifier.PUBLIC);
+		typeClass.getDeclarations().add(constructor);
+	}
 	//
 	// private void writeRecordEquals(int indent, String name, Type.Record recT)
 	// {

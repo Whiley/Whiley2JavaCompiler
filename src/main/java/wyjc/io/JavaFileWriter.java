@@ -38,6 +38,10 @@ public class JavaFileWriter {
 			write(indent,(JavaFile.Class)d);
  		} else if(d instanceof JavaFile.Method) {
 			write(indent,(JavaFile.Method)d);
+ 		} else if(d instanceof JavaFile.Constructor) {
+			write(indent,(JavaFile.Constructor)d);
+ 		} else if(d instanceof JavaFile.Field) {
+			write(indent,(JavaFile.Field)d);
  		} else {
  			throw new RuntimeException("Unknown declaration encountered");
  		}
@@ -56,14 +60,14 @@ public class JavaFileWriter {
 		out.println("}");
 	}
 
-	private void write(int indent, JavaFile.Method methodDecl) {
+	private void write(int indent, JavaFile.Method method) {
 		tab(indent);
-		writeModifiers(methodDecl.getModifiers());
-		writeType(methodDecl.getReturnType());
+		writeModifiers(method.getModifiers());
+		writeType(method.getReturnType());
 		out.print(" ");
-		out.print(methodDecl.getName());
+		out.print(method.getName());
 		out.print("(");
-		List<Pair<JavaFile.Type,String>> parameters = methodDecl.getParameters();
+		List<Pair<JavaFile.Type,String>> parameters = method.getParameters();
 		for(int i=0;i!=parameters.size();++i) {
 			if(i != 0) {
 				out.print(", ");
@@ -74,13 +78,47 @@ public class JavaFileWriter {
 			out.print(p.second());
 		}
 		out.print(")");
-		if(methodDecl.getBody() != null) {
-			writeBlock(indent,methodDecl.getBody());
+		if(method.getBody() != null) {
+			writeBlock(indent,method.getBody());
 			out.println();
 		} else {
 			out.println(";");
 		}
 
+	}
+
+	private void write(int indent, JavaFile.Constructor constructor) {
+		tab(indent);
+		writeModifiers(constructor.getModifiers());
+		out.print(constructor.getName());
+		out.print("(");
+		List<Pair<JavaFile.Type,String>> parameters = constructor.getParameters();
+		for(int i=0;i!=parameters.size();++i) {
+			if(i != 0) {
+				out.print(", ");
+			}
+			Pair<JavaFile.Type,String> p = parameters.get(i);
+			writeType(p.first());
+			out.print(" ");
+			out.print(p.second());
+		}
+		out.print(")");
+		if(constructor.getBody() != null) {
+			writeBlock(indent,constructor.getBody());
+			out.println();
+		} else {
+			out.println(";");
+		}
+
+	}
+
+	private void write(int indent, JavaFile.Field fieldDecl) {
+		tab(indent);
+		writeModifiers(fieldDecl.getModifiers());
+		writeType(fieldDecl.getType());
+		out.print(" ");
+		out.print(fieldDecl.getName());
+		out.println(";");
 	}
 
 	private void writeBlock(int indent, JavaFile.Block block) {
