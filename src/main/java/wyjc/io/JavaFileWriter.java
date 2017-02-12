@@ -174,6 +174,8 @@ public class JavaFileWriter {
 			writeArrayAccess((JavaFile.ArrayAccess) term);
 		} else if(term instanceof JavaFile.Constant) {
 			writeConstant((JavaFile.Constant) term);
+		} else if(term instanceof JavaFile.FieldAccess) {
+			writeFieldAccess((JavaFile.FieldAccess) term);
 		} else if(term instanceof JavaFile.Invoke) {
 			writeInvoke((JavaFile.Invoke) term);
 		} else if(term instanceof JavaFile.New) {
@@ -208,6 +210,11 @@ public class JavaFileWriter {
 		}
 	}
 
+	private void writeFieldAccess(JavaFile.FieldAccess term) {
+		writeExpression(term.getSource());
+		out.print(".");
+		out.print(term.getField());
+	}
 	private void writeInvoke(JavaFile.Invoke term) {
 		JavaFile.Term receiver = term.getReceiver();
 		if(receiver != null) {

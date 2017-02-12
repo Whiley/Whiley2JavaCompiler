@@ -460,13 +460,138 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
-	private JavaFile.Term translateOperator(Location<Bytecode.Operator> expr) {
+	private JavaFile.Term translateOperator(Location<Bytecode.Operator> expr) throws ResolveError {
+		Bytecode.OperatorKind kind = expr.getBytecode().kind();
+		// First, translate all children of the operator.
 		List<JavaFile.Term> children = new ArrayList<>();
 		for (int i = 0; i != expr.numberOfOperands(); ++i) {
 			children.add(translateExpression(expr.getOperand(i)));
 		}
-		JavaFile.Operator.Kind kind = translateOpcode(expr.getBytecode().kind());
-		return new JavaFile.Operator(kind, children);
+		//
+		Type argumentType = expr.getOperand(0).getType();
+		if (isDynamicallySized(argumentType)) {
+			// In this case, we have dynamically-sized arguments (e.g.
+			// BigInteger). In such case, we must exploit the various methods on
+			// Object or BigInteger for evaluating the operation.
+
+			// FIXME: this coercion should be deprecated with proper support for
+			// fixed-size types in the Whiley Compiler.
+			for (int i = 0; i != children.size(); ++i) {
+				children.set(i, toBigInteger(children.get(i), expr.getOperand(i).getType()));
+			}
+			//
+			switch (kind) {
+			case NEG:
+			case ADD:
+			case SUB:
+			case MUL:
+			case DIV:
+			case REM:
+				return translateUnboundArithmeticOperator(kind, children);
+			case EQ:
+			case NEQ:
+			case LT:
+			case LTEQ:
+			case GT:
+			case GTEQ:
+				return translateUnboundComparator(kind, children);
+			default:
+				throw new IllegalArgumentException("Unknown expression encountered");
+			}
+		} else {
+			// In this case, we have a fixed-sized arguments. Therefore, we can
+			// employ Java's underlying arithmetic operators, comparators, etc.
+			JavaFile.Operator.Kind k = translate2JavaOperator(kind);
+			return new JavaFile.Operator(k, children);
+		}
+	}
+
+	/**
+	 * Translate an unbound arithmetic operator. For example, the following
+	 * Whiley code:
+	 *
+	 * <pre>
+	 * int x = 1
+	 * int y = x + 2
+	 * </pre>
+	 *
+	 * would translate into the following Java code:
+	 *
+	 * <pre>
+	 * BigInteger x = BigInteger.valueOf(1);
+	 * BigInteger y = x.add(BigInteger.valueOf(1));
+	 * </pre>
+	 *
+	 * @param k
+	 * @param operands
+	 * @return
+	 */
+	private static JavaFile.Term translateUnboundArithmeticOperator(Bytecode.OperatorKind k,
+			List<JavaFile.Term> operands) {
+		String methodName;
+		switch (k) {
+		case NEG:
+			methodName = "negate";
+			break;
+		case ADD:
+			methodName = "add";
+			break;
+		case SUB:
+			methodName = "subtract";
+			break;
+		case MUL:
+			methodName = "multiply";
+			break;
+		case DIV:
+			methodName = "divide";
+			break;
+		case REM:
+			methodName = "remainder";
+			break;
+		default:
+			throw new IllegalArgumentException("unknown operator kind : " + k);
+		}
+		// Construct the method invocation
+		JavaFile.Term receiver = operands.get(0);
+		if (operands.size() == 1) {
+			return new JavaFile.Invoke(receiver, new String[] { methodName });
+		} else {
+			JavaFile.Term operand = operands.get(1);
+			return new JavaFile.Invoke(receiver, new String[] { methodName }, operand);
+		}
+	}
+
+	private static JavaFile.Term translateUnboundComparator(Bytecode.OperatorKind k, List<JavaFile.Term> operands) {
+		JavaFile.Operator.Kind kind;
+		JavaFile.Term receiver = operands.get(0);
+		JavaFile.Term operand = operands.get(1);
+		//
+		switch (k) {
+		case NEQ: {
+			JavaFile.Term eq = new JavaFile.Invoke(receiver, new String[] { "equals" }, operand);
+			return new JavaFile.Operator(JavaFile.Operator.Kind.NOT, eq);
+		}
+		case EQ: {
+			return new JavaFile.Invoke(receiver, new String[] { "equals" }, operand);
+		}
+		case LT:
+			kind = JavaFile.Operator.Kind.LT;
+			break;
+		case LTEQ:
+			kind = JavaFile.Operator.Kind.LTEQ;
+			break;
+		case GT:
+			kind = JavaFile.Operator.Kind.GT;
+			break;
+		case GTEQ:
+			kind = JavaFile.Operator.Kind.GTEQ;
+			break;
+		default:
+			throw new IllegalArgumentException("unknown operator kind : " + k);
+		}
+		// Construct the method invocation
+		JavaFile.Term cmp = new JavaFile.Invoke(receiver, new String[] { "compareTo" }, operand);
+		return new JavaFile.Operator(kind, cmp, new JavaFile.Constant(0));
 	}
 
 	private JavaFile.Term translateArrayAccess(Location<Bytecode.Operator> expr) throws ResolveError {
@@ -506,6 +631,7 @@ public class JavaCompileTask implements Build.Task {
 		Constant c = expr.getBytecode().constant();
 		return translateConstant(c);
 	}
+
 	private JavaFile.Term translateConstant(Constant c) throws ResolveError {
 		Type type = c.type();
 		Object value;
@@ -524,7 +650,7 @@ public class JavaCompileTask implements Build.Task {
 			} else {
 				return translateFixedIntegerConstant(bi);
 			}
-		} else if(c instanceof Constant.Array) {
+		} else if (c instanceof Constant.Array) {
 			Constant.Array ac = (Constant.Array) c;
 			return translateArrayConstant((Constant.Array) c);
 		} else {
@@ -534,8 +660,9 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	/**
-	 * Translate an integer constant which will be assigned to a fixed-sized Java
-	 * variable. Such constants can be safely expressed as integer literals.
+	 * Translate an integer constant which will be assigned to a fixed-sized
+	 * Java variable. Such constants can be safely expressed as integer
+	 * literals.
 	 *
 	 * @param constant
 	 * @return
@@ -563,9 +690,7 @@ public class JavaCompileTask implements Build.Task {
 	private JavaFile.Term translateUnboundIntegerConstant(BigInteger constant) {
 		long lv = constant.longValue();
 		// FIXME: bug here for constants which cannot fit inside a long
-		return new JavaFile.Invoke(null, new String[] {
-				"BigInteger", "valueOf"
-		}, new JavaFile.Constant(lv));
+		return new JavaFile.Invoke(null, new String[] { "BigInteger", "valueOf" }, new JavaFile.Constant(lv));
 	}
 
 	/**
@@ -846,6 +971,28 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	/**
+	 * Convert a given term which returns a value of Java int or long type into
+	 * a Java BigInteger. Essentially, if the returned value is a such a type
+	 * then this will invoke <code>BigInteger.valueOf()</code>. Otherwise, it's
+	 * a no-operation.
+	 *
+	 * @param term
+	 *            The Java term whose value is being converted to a
+	 *            <code>BigInteger</code>.
+	 * @param type
+	 *            The Whiley type associated with the given term.
+	 * @return
+	 * @throws ResolveError
+	 */
+	private JavaFile.Term toBigInteger(JavaFile.Term term, Type type) throws ResolveError {
+		if (isDynamicallySized(type)) {
+			return term;
+		} else {
+			return new JavaFile.Invoke(null, new String[] { "BigInteger", "valueOf" }, term);
+		}
+	}
+
+	/**
 	 * Return true if the type in question can be copied directly. More
 	 * specifically, if a bitwise copy of the value is sufficient to fully copy
 	 * it. In general, this is true for primitive data types in Java. But, for
@@ -865,7 +1012,7 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
-	private static JavaFile.Operator.Kind translateOpcode(Bytecode.OperatorKind k) {
+	private static JavaFile.Operator.Kind translate2JavaOperator(Bytecode.OperatorKind k) {
 		switch (k) {
 		case NEG:
 			return JavaFile.Operator.Kind.NEG;

@@ -344,6 +344,11 @@ public class JavaFile extends AbstractCompilationUnit {
 			this.operands = operands;
 		}
 
+		public Operator(Kind kind, Term... operands) {
+			this.kind = kind;
+			this.operands = Arrays.asList(operands);
+		}
+
 		public Kind getKind() {
 			return kind;
 		}
