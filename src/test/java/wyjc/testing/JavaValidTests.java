@@ -188,7 +188,7 @@ public class JavaValidTests {
 		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
 		Content.Registry registry = new wyc.Activator.Registry();
 		JavaCompile cmd = new JavaCompile(registry,Logger.NULL,sysout,syserr);
-		cmd.setWhileydir(whileydir);
+		cmd.setWhileydir(new File(whileydir));
 		cmd.setVerbose();
 		Compile.Result result = cmd.execute(args);
 		byte[] errBytes = syserr.toByteArray();

@@ -12,7 +12,6 @@ import java.util.List;
 
 import wycc.util.Pair;
 import wyjc.core.*;
-import wyrl.core.Type.Term;
 
 public class JavaFileWriter {
 	private final PrintWriter out;

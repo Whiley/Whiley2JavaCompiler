@@ -135,7 +135,7 @@ public class JavaCompileTask implements Build.Task {
 		if (type instanceof Type.Record) {
 			Type.Record recT = (Type.Record) type;
 			JavaFile.Class typeClass = new JavaFile.Class(decl.name());
-			addModifiers(typeClass,decl.modifiers());
+			addModifiers(typeClass, decl.modifiers());
 			typeClass.getModifiers().add(JavaFile.Modifier.STATIC);
 			typeClass.getModifiers().add(JavaFile.Modifier.FINAL);
 			// Write field declartions
@@ -449,7 +449,8 @@ public class JavaCompileTask implements Build.Task {
 			case Bytecode.OPCODE_all:
 			case Bytecode.OPCODE_some:
 				return translateQuantifier((Location<Bytecode.Quantifier>) expr);
-			case Bytecode.OPCODE_varaccess:
+			case Bytecode.OPCODE_varmove:
+			case Bytecode.OPCODE_varcopy:
 				return translateVariableAccess((Location<Bytecode.VariableAccess>) expr);
 			default:
 				throw new IllegalArgumentException("unknown bytecode encountered: " + expr.getBytecode());
@@ -468,10 +469,11 @@ public class JavaCompileTask implements Build.Task {
 		return new JavaFile.Operator(kind, children);
 	}
 
-	private JavaFile.Term translateArrayAccess(Location<Bytecode.Operator> expr) {
+	private JavaFile.Term translateArrayAccess(Location<Bytecode.Operator> expr) throws ResolveError {
+		Location<?> indexExpr = expr.getOperand(1);
 		JavaFile.Term src = translateExpression(expr.getOperand(0));
-		JavaFile.Term index = translateExpression(expr.getOperand(1));
-		return new JavaFile.ArrayAccess(src,index);
+		JavaFile.Term index = translateExpression(indexExpr);
+		return new JavaFile.ArrayAccess(src, toInt(index, indexExpr.getType()));
 	}
 
 	private JavaFile.Term translateArrayGenerator(Location<Bytecode.Operator> expr) {
@@ -484,14 +486,13 @@ public class JavaCompileTask implements Build.Task {
 			children.add(translateExpression(expr.getOperand(i)));
 		}
 		JavaFile.Type type = translateType(expr.getType());
-		return new JavaFile.New(type,children);
+		return new JavaFile.New(type, children);
 	}
 
 	private JavaFile.Term translateArrayLength(Location<Bytecode.Operator> expr) {
 		JavaFile.Term src = translateExpression(expr.getOperand(0));
-		return new JavaFile.FieldAccess(src,"length");
+		return new JavaFile.FieldAccess(src, "length");
 	}
-
 
 	private JavaFile.Term translateConvert(Location<Bytecode.Convert> expr) {
 		// out.print("(");
@@ -503,7 +504,10 @@ public class JavaCompileTask implements Build.Task {
 
 	private JavaFile.Term translateConst(Location<Bytecode.Const> expr) throws ResolveError {
 		Constant c = expr.getBytecode().constant();
-		Type type = expr.getType();
+		return translateConstant(c);
+	}
+	private JavaFile.Term translateConstant(Constant c) throws ResolveError {
+		Type type = c.type();
 		Object value;
 		if (c instanceof Constant.Null) {
 			value = null;
@@ -515,26 +519,82 @@ public class JavaCompileTask implements Build.Task {
 			BigInteger bi = bc.value();
 			// This case is more complex because we have to manage large integer
 			// values (which do not fit as literals).
-			if(isDynamicallySized(type)) {
-				return translateLargeIntegerConstant(bi);
+			if (isDynamicallySized(type)) {
+				return translateUnboundIntegerConstant(bi);
 			} else {
-				long lv = bi.longValue();
-				if (lv >= Integer.MIN_VALUE && lv < Integer.MAX_VALUE) {
-					value = (int) lv;
-				} else {
-					value = lv;
-				}
+				return translateFixedIntegerConstant(bi);
 			}
+		} else if(c instanceof Constant.Array) {
+			Constant.Array ac = (Constant.Array) c;
+			return translateArrayConstant((Constant.Array) c);
 		} else {
 			throw new IllegalArgumentException("GOT HERE");
 		}
 		return new JavaFile.Constant(value);
 	}
 
-	private JavaFile.Term translateLargeIntegerConstant(BigInteger constant) {
+	/**
+	 * Translate an integer constant which will be assigned to a fixed-sized Java
+	 * variable. Such constants can be safely expressed as integer literals.
+	 *
+	 * @param constant
+	 * @return
+	 */
+	private JavaFile.Term translateFixedIntegerConstant(BigInteger constant) {
+		long lv = constant.longValue();
+		Object value;
+		if (lv >= Integer.MIN_VALUE && lv < Integer.MAX_VALUE) {
+			value = (int) lv;
+		} else {
+			value = lv;
+		}
+		return new JavaFile.Constant(value);
+	}
+
+	/**
+	 * Translate an integer constant which will be assigned to a
+	 * dynamically-sized Java variable. Such constants cannot be expressed as
+	 * integer literals and must be converted into instances of
+	 * <code>BigInteger</code>.
+	 *
+	 * @param constant
+	 * @return
+	 */
+	private JavaFile.Term translateUnboundIntegerConstant(BigInteger constant) {
 		long lv = constant.longValue();
 		// FIXME: bug here for constants which cannot fit inside a long
-		return new JavaFile.Invoke(null, new String[] { "BigInteger", "valueOf" }, new JavaFile.Constant(lv));
+		return new JavaFile.Invoke(null, new String[] {
+				"BigInteger", "valueOf"
+		}, new JavaFile.Constant(lv));
+	}
+
+	/**
+	 * Translate an array constant. This simply creates an array of the
+	 * appropriate type and employs an initialiser expression to assign each
+	 * element. For example, the following Whiley code:
+	 *
+	 * <pre>
+	 * int[] xs = [1,2]
+	 * </pre>
+	 *
+	 * is translated into the following Java code
+	 *
+	 * <pre>
+	 * BigInteger[] xs = new BigInteger[] { BigInteger.valueOf(1), BigInteger.valueOf(1) };
+	 * </pre>
+	 *
+	 * @param array
+	 * @return
+	 * @throws ResolveError
+	 */
+	private JavaFile.Term translateArrayConstant(Constant.Array array) throws ResolveError {
+		List<Constant> elements = array.values();
+		List<JavaFile.Term> children = new ArrayList<>();
+		for (int i = 0; i != elements.size(); ++i) {
+			children.add(translateConstant(elements.get(i)));
+		}
+		JavaFile.Type type = translateType(array.type());
+		return new JavaFile.New(type, children);
 	}
 
 	private JavaFile.Term translateFieldLoad(Location<Bytecode.FieldLoad> expr) {
@@ -646,7 +706,7 @@ public class JavaCompileTask implements Build.Task {
 		Location<VariableDeclaration> vd = getVariableDeclaration(expr.getOperand(0));
 		JavaFile.Term t = new JavaFile.VariableAccess(vd.getBytecode().getName());
 		JavaFile.Type type = translateType(expr.getType());
-		if (!isCopyable(type)) {
+		if (expr.getOpcode() == Bytecode.OPCODE_varcopy && !isCopyable(type)) {
 			// Since this type is not copyable, we need to clone it to ensure
 			// that ownership is properly preserved.
 			t = new JavaFile.Invoke(t, "clone");
@@ -726,14 +786,13 @@ public class JavaCompileTask implements Build.Task {
 			return false;
 		} else if (typeSystem.isSubtype(Type.T_INT, type)) {
 			return true;
-		} else if(typeSystem.expandAsEffectiveArray(type) != null){
+		} else if (typeSystem.expandAsEffectiveArray(type) != null) {
 			return true;
 		} else {
 			// FIXME: need to recursively check component types for records.
 			return false;
 		}
 	}
-
 
 	private static Type TYPE_I8 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "i8"));
 	private static Type TYPE_I16 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "i16"));
@@ -763,6 +822,28 @@ public class JavaCompileTask implements Build.Task {
 			put(Type.T_ANY, new JavaFile.Reference("Object"));
 		}
 	};
+
+	/**
+	 * Convert a given term which returns a value of integer type into a Java
+	 * int. Essentially, if the returned value is a BigInteger then this will
+	 * invoke <code>BigInteger.intValue()</code>. Otherwise, it's a
+	 * no-operation.
+	 *
+	 * @param term
+	 *            The Java term whose value is being converted to an
+	 *            <code>int</code>.
+	 * @param type
+	 *            The Whiley type associated with the given term.
+	 * @return
+	 * @throws ResolveError
+	 */
+	private JavaFile.Term toInt(JavaFile.Term term, Type type) throws ResolveError {
+		if (isDynamicallySized(type)) {
+			return new JavaFile.Invoke(term, new String[] { "intValue" });
+		} else {
+			return term;
+		}
+	}
 
 	/**
 	 * Return true if the type in question can be copied directly. More
