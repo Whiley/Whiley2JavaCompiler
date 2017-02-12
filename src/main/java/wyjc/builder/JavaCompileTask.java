@@ -6,6 +6,10 @@
 
 package wyjc.builder;
 
+import static wyil.lang.SyntaxTree.CONDITION;
+import static wyil.lang.SyntaxTree.LEFTHANDSIDE;
+import static wyil.lang.SyntaxTree.RIGHTHANDSIDE;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.*;
@@ -21,6 +25,7 @@ import wyfs.lang.Path.Entry;
 import wyfs.lang.Path.Root;
 import wyfs.util.Trie;
 import wyil.lang.*;
+import wyil.lang.Bytecode.Block;
 import wyil.lang.Bytecode.VariableDeclaration;
 import wyil.lang.SyntaxTree.Location;
 import wyil.util.TypeSystem;
@@ -292,56 +297,69 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	private JavaFile.Term translateStatement(Location<?> c) {
-		switch (c.getOpcode()) {
-		case Bytecode.OPCODE_aliasdecl:
-			// return
-			// translateAliasDeclaration((Location<Bytecode.AliasDeclaration>)
-			// c);
-		case Bytecode.OPCODE_assert:
-			return translateAssert((Location<Bytecode.Assert>) c);
-		case Bytecode.OPCODE_assume:
-			return translateAssume((Location<Bytecode.Assume>) c);
-		case Bytecode.OPCODE_assign:
-			// return translateAssign((Location<Bytecode.Assign>) c);
-		case Bytecode.OPCODE_break:
-			return translateBreak((Location<Bytecode.Break>) c);
-		case Bytecode.OPCODE_continue:
-			return translateContinue((Location<Bytecode.Continue>) c);
-		case Bytecode.OPCODE_debug:
-			// return translateDebug((Location<Bytecode.Debug>) c);
-		case Bytecode.OPCODE_dowhile:
-			// return translateDoWhile((Location<Bytecode.DoWhile>) c);
-		case Bytecode.OPCODE_fail:
-			// return translateFail((Location<Bytecode.Fail>) c);
-		case Bytecode.OPCODE_if:
-		case Bytecode.OPCODE_ifelse:
-			return translateIf((Location<Bytecode.If>) c);
-		case Bytecode.OPCODE_indirectinvoke:
-			// return
-			// translateIndirectInvoke((Location<Bytecode.IndirectInvoke>) c);
-		case Bytecode.OPCODE_invoke:
-			// return translateInvoke((Location<Bytecode.Invoke>) c);
-		case Bytecode.OPCODE_namedblock:
-			// return translateNamedBlock((Location<Bytecode.NamedBlock>) c);
-		case Bytecode.OPCODE_while:
-			// return translateWhile((Location<Bytecode.While>) c);
-		case Bytecode.OPCODE_return:
-			return translateReturn((Location<Bytecode.Return>) c);
-		case Bytecode.OPCODE_skip:
-			// return translateSkip((Location<Bytecode.Skip>) c);
-		case Bytecode.OPCODE_switch:
-			// return translateSwitch((Location<Bytecode.Switch>) c);
-		case Bytecode.OPCODE_vardecl:
-		case Bytecode.OPCODE_vardeclinit:
-			return translateVariableDeclaration((Location<Bytecode.VariableDeclaration>) c);
-		default:
-			throw new IllegalArgumentException("unknown bytecode encountered");
+		try {
+			switch (c.getOpcode()) {
+			case Bytecode.OPCODE_aliasdecl:
+				// return
+				// translateAliasDeclaration((Location<Bytecode.AliasDeclaration>)
+				// c);
+			case Bytecode.OPCODE_assert:
+				return translateAssert((Location<Bytecode.Assert>) c);
+			case Bytecode.OPCODE_assume:
+				return translateAssume((Location<Bytecode.Assume>) c);
+			case Bytecode.OPCODE_assign:
+				return translateAssign((Location<Bytecode.Assign>) c);
+			case Bytecode.OPCODE_break:
+				return translateBreak((Location<Bytecode.Break>) c);
+			case Bytecode.OPCODE_continue:
+				return translateContinue((Location<Bytecode.Continue>) c);
+			//case Bytecode.OPCODE_debug:
+				// return translateDebug((Location<Bytecode.Debug>) c);
+			//case Bytecode.OPCODE_dowhile:
+				// return translateDoWhile((Location<Bytecode.DoWhile>) c);
+			//case Bytecode.OPCODE_fail:
+				// return translateFail((Location<Bytecode.Fail>) c);
+			case Bytecode.OPCODE_if:
+			case Bytecode.OPCODE_ifelse:
+				return translateIf((Location<Bytecode.If>) c);
+			//case Bytecode.OPCODE_indirectinvoke:
+				// return
+				// translateIndirectInvoke((Location<Bytecode.IndirectInvoke>)
+				// c);
+			case Bytecode.OPCODE_invoke:
+				return translateInvoke((Location<Bytecode.Invoke>) c);
+//			case Bytecode.OPCODE_namedblock:
+//				 return translateBlock((Location<Bytecode.NamedBlock>) c);
+			case Bytecode.OPCODE_while:
+				return translateWhile((Location<Bytecode.While>) c);
+			case Bytecode.OPCODE_return:
+				return translateReturn((Location<Bytecode.Return>) c);
+			case Bytecode.OPCODE_switch:
+				return translateSwitch((Location<Bytecode.Switch>) c);
+			case Bytecode.OPCODE_vardecl:
+			case Bytecode.OPCODE_vardeclinit:
+				return translateVariableDeclaration((Location<Bytecode.VariableDeclaration>) c);
+			default:
+				throw new IllegalArgumentException("unknown bytecode encountered");
+			}
+		} catch (ResolveError e) {
+			throw new RuntimeException("resolve error", e);
 		}
 	}
 
 	private JavaFile.Term translateAssert(Location<Bytecode.Assert> stmt) {
 		JavaFile.Term operand = translateExpression(stmt.getOperand(0));
 		return new JavaFile.Assert(operand);
+	}
+
+	private JavaFile.Term translateAssign(Location<Bytecode.Assign> stmt) {
+		JavaFile.Term[] lhs = translateExpressions(stmt.getOperandGroup(LEFTHANDSIDE));
+		JavaFile.Term[] rhs = translateExpressions(stmt.getOperandGroup(RIGHTHANDSIDE));
+		if(lhs.length > 1) {
+			throw new IllegalArgumentException("Need support for multiple assignments");
+		} else {
+			return new JavaFile.Assignment(lhs[0],rhs[0]);
+		}
 	}
 
 	private JavaFile.Term translateAssume(Location<Bytecode.Assume> stmt) {
@@ -385,6 +403,31 @@ public class JavaCompileTask implements Build.Task {
 		return new JavaFile.Return(initialiser);
 	}
 
+	private JavaFile.Term translateSwitch(Location<Bytecode.Switch> stmt) throws ResolveError {
+		JavaFile.Term condition = translateExpression(stmt.getOperand(0));
+		Bytecode.Switch bytecode = stmt.getBytecode();
+		Bytecode.Case[] cases = bytecode.cases();
+		ArrayList<JavaFile.Case> jCases = new ArrayList<>();
+		//
+		for (int i = 0; i != cases.length; ++i) {
+			Bytecode.Case c = cases[i];
+			for (Constant v : c.values()) {
+				// FIXME: problem here when values are not constants
+				JavaFile.Constant label = (JavaFile.Constant) translateConstant(v);
+				JavaFile.Block body = translateBlock(stmt.getBlock(i));
+				jCases.add(new JavaFile.Case(label, body));
+			}
+		}
+		//
+		return new JavaFile.Switch(condition, jCases);
+	}
+
+	private JavaFile.Term translateWhile(Location<Bytecode.While> stmt) {
+		JavaFile.Term condition = translateExpression(stmt.getOperand(0));
+		JavaFile.Block body = translateBlock(stmt.getBlock(0));
+		return new JavaFile.While(condition, body);
+	}
+
 	private void writeLocationsAsComments(SyntaxTree tree) {
 		List<Location<?>> locations = tree.getLocations();
 		for (int i = 0; i != locations.size(); ++i) {
@@ -393,6 +436,14 @@ public class JavaCompileTask implements Build.Task {
 			String type = String.format("%1$-" + 8 + "s", Arrays.toString(loc.getTypes()));
 			System.out.println("// " + id + " " + type + " " + loc.getBytecode());
 		}
+	}
+
+	private JavaFile.Term[] translateExpressions(Location<?>[] expr) {
+		JavaFile.Term[] terms = new JavaFile.Term[expr.length];
+		for(int i=0;i!=terms.length;++i) {
+			terms[i] = translateExpression(expr[i]);
+		}
+		return terms;
 	}
 
 	// @SuppressWarnings("unchecked")
@@ -640,6 +691,9 @@ public class JavaCompileTask implements Build.Task {
 		} else if (c instanceof Constant.Bool) {
 			Constant.Bool bc = (Constant.Bool) c;
 			value = bc.value();
+		} else if (c instanceof Constant.Byte) {
+			Constant.Byte bc = (Constant.Byte) c;
+			value = bc.value();
 		} else if (c instanceof Constant.Integer) {
 			Constant.Integer bc = (Constant.Integer) c;
 			BigInteger bi = bc.value();
@@ -788,9 +842,9 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	private JavaFile.Term translateRecordConstructor(Location<Bytecode.Operator> expr) {
-		// Type.EffectiveRecord t = (Type.EffectiveRecord) expr.getType();
-		// String[] fields = t.getFieldNames();
-		// Location<?>[] operands = expr.getOperands();
+		Type.EffectiveRecord t = (Type.EffectiveRecord) expr.getType();
+		String[] fields = t.getFieldNames();
+		Location<?>[] operands = expr.getOperands();
 		// out.print("{");
 		// for (int i = 0; i != operands.length; ++i) {
 		// if (i != 0) {

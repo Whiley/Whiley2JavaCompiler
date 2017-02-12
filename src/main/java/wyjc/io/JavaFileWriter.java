@@ -95,6 +95,8 @@ public class JavaFileWriter {
 		tab(indent);
 		if(term instanceof JavaFile.Assert) {
 			writeAssert(indent,(JavaFile.Assert) term);
+		} else if(term instanceof JavaFile.Assignment) {
+			writeAssignment(indent,(JavaFile.Assignment) term);
 		} else if(term instanceof JavaFile.Break) {
 			writeBreak(indent,(JavaFile.Break) term);
 		} else if(term instanceof JavaFile.Continue) {
@@ -105,6 +107,8 @@ public class JavaFileWriter {
 			writeReturn(indent,(JavaFile.Return) term);
 		} else if(term instanceof JavaFile.VariableDeclaration) {
 			writeVariableDeclaration(indent,(JavaFile.VariableDeclaration) term);
+		} else if(term instanceof JavaFile.While) {
+			writeWhile(indent,(JavaFile.While) term);
 		} else {
 			throw new IllegalArgumentException("unknown statement: " + term);
 		}
@@ -113,6 +117,13 @@ public class JavaFileWriter {
 	private void writeAssert(int indent, JavaFile.Assert term) {
 		out.print("assert ");
 		writeExpression(term.getOperand());
+		out.println(";");
+	}
+
+	private void writeAssignment(int indent, JavaFile.Assignment term) {
+		writeExpression(term.getLefthandSide());
+		out.print(" = ");
+		writeExpression(term.getRighthandSide());
 		out.println(";");
 	}
 
@@ -132,8 +143,8 @@ public class JavaFileWriter {
 		if (term.getFalseBranch() != null) {
 			out.print(" else ");
 			writeBlock(indent, term.getFalseBranch());
-			out.println();
 		}
+		out.println();
 	}
 
 	private void writeReturn(int indent, JavaFile.Return term) {
@@ -154,6 +165,14 @@ public class JavaFileWriter {
 			writeExpression(term.getInitialiser());
 		}
 		out.println(";");
+	}
+
+	private void writeWhile(int indent, JavaFile.While term) {
+		out.print("while(");
+		writeExpression(term.getCondition());
+		out.print(") ");
+		writeBlock(indent, term.getBody());
+		out.println();
 	}
 
 	private void writeExpressionWithBraces(JavaFile.Term term) {

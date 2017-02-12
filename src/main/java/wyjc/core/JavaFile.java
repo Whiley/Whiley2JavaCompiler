@@ -211,6 +211,24 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class Assignment implements Term {
+		private Term lhs;
+		private Term rhs;
+
+		public Assignment(Term lhs, Term rhs) {
+			this.lhs = lhs;
+			this.rhs = rhs;
+		}
+
+		public Term getLefthandSide() {
+			return lhs;
+		}
+
+		public Term getRighthandSide() {
+			return rhs;
+		}
+	}
+
 	public static class Break implements Term {
 	}
 
@@ -221,8 +239,8 @@ public class JavaFile extends AbstractCompilationUnit {
 		private Object value;
 
 		public Constant(Object value) {
-			if (value == null || value instanceof Boolean || value instanceof Integer || value instanceof Long
-					|| value instanceof String) {
+			if (value == null || value instanceof Boolean || value instanceof Byte || value instanceof Integer
+					|| value instanceof Long || value instanceof String) {
 				this.value = value;
 			} else {
 				throw new IllegalArgumentException("invalid constant value: " + value);
@@ -370,6 +388,42 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class Case implements Term {
+		private Constant label;
+		private Term body;
+
+		public Case(Constant label, Term body) {
+			this.label = label;
+			this.body = body;
+		}
+
+		public Constant getLabel() {
+			return label;
+		}
+
+		public Term getBody() {
+			return body;
+		}
+	}
+
+	public static class Switch implements Term {
+		private Term condition;
+		private List<Case> cases;
+
+		public Switch(Term condition, List<Case> cases) {
+			this.condition = condition;
+			this.cases = cases;
+		}
+
+		public Term getCondition() {
+			return condition;
+		}
+
+		public List<Case> getCases() {
+			return cases;
+		}
+	}
+
 	public static class VariableDeclaration extends AbstractDeclaration implements Term {
 		private Type type;
 		private Term initialiser;
@@ -398,6 +452,24 @@ public class JavaFile extends AbstractCompilationUnit {
 
 		public String getName() {
 			return name;
+		}
+	}
+
+	public static class While implements Term {
+		private Term condition;
+		private Block body;
+
+		public While(Term condition, Block body) {
+			this.condition = condition;
+			this.body = body;
+		}
+
+		public Term getCondition() {
+			return condition;
+		}
+
+		public Block getBody() {
+			return body;
 		}
 	}
 
