@@ -116,9 +116,10 @@ public class JavaCompileTask implements Build.Task {
 		jcd.getModifiers().add(JavaFile.Modifier.FINAL);
 		// Translate all declarations
 		for (WyilFile.Block b : wf.blocks()) {
+			try {
 			if (b instanceof WyilFile.Declaration) {
 				WyilFile.Declaration wd = (WyilFile.Declaration) b;
-				;
+
 				// writeLocationsAsComments(d.getTree());
 
 				if (wd instanceof WyilFile.FunctionOrMethod) {
@@ -127,12 +128,15 @@ public class JavaCompileTask implements Build.Task {
 					build((WyilFile.Type) b, jcd);
 				}
 			}
+			} catch(ResolveError e) {
+				throw new IllegalArgumentException(e);
+			}
 		}
 		jf.getDeclarations().add(jcd);
 		return jf;
 	}
 
-	private void build(WyilFile.Type decl, JavaFile.Class parent) {
+	private void build(WyilFile.Type decl, JavaFile.Class parent) throws ResolveError {
 		Type type = decl.type();
 
 		// FIXME: expand nominal types
@@ -146,10 +150,9 @@ public class JavaCompileTask implements Build.Task {
 			// Write field declartions
 			writeFieldDeclarations(typeClass,recT);
 			writeRecordConstructor(typeClass,decl.name(),recT);
-			// writeRecordEquals(indent,decl.name(),recT);
+			writeRecordEquals(typeClass,decl.name(),recT);
 			// writeRecordHashCode(indent,decl.name(),recT);
 			// writeRecordClone(indent,decl.name(),recT);
-			// tabIndent(indent);
 			parent.getDeclarations().add(typeClass);
 		}
 	}
@@ -187,36 +190,51 @@ public class JavaCompileTask implements Build.Task {
 		constructor.getModifiers().add(JavaFile.Modifier.PUBLIC);
 		typeClass.getDeclarations().add(constructor);
 	}
-	//
-	// private void writeRecordEquals(int indent, String name, Type.Record recT)
-	// {
-	// tabIndent(indent+1);
-	// out.println("@Override");
-	// tabIndent(indent+1);
-	// out.println("public boolean equals(Object o) {");
-	// tabIndent(indent+2);
-	// out.println("if(o instanceof " + name + ") {");
-	// tabIndent(indent+3);
-	// out.println(name + " r = (" + name + ") o;");
-	// tabIndent(indent+3);
-	// out.print("return ");
-	// String[] fields = recT.getFieldNames();
-	// for(int i=0;i!=recT.size();++i) {
-	// if(i != 0) {
-	// out.print(" && ");
-	// }
-	// String field = fields[i];
-	// out.print(field + " == r." + field);
-	// }
-	// out.println(";");
-	// tabIndent(indent+2);
-	// out.println("}");
-	// tabIndent(indent+2);
-	// out.println("return false;");
-	// tabIndent(indent+1);
-	// out.println("}");
-	// out.println();
-	// }
+
+	private void writeRecordEquals(JavaFile.Class typeClass, String name, Type.Record recT) throws ResolveError {
+		String[] fieldNames = recT.getFieldNames();
+		JavaFile.VariableAccess otherVar = new JavaFile.VariableAccess("other");
+		JavaFile.VariableAccess oVar = new JavaFile.VariableAccess("o");
+		// Construct instanceof test
+		JavaFile.Type thisType = new JavaFile.Reference(name);
+		JavaFile.Term condition = new JavaFile.InstanceOf(otherVar,thisType);
+		JavaFile.Block trueBranch = new JavaFile.Block();
+		JavaFile.If ifStmt = new JavaFile.If(condition, trueBranch, null);
+		// Construct conditional body
+		JavaFile.Cast cast = new JavaFile.Cast(thisType,otherVar);
+		JavaFile.VariableDeclaration decl = new JavaFile.VariableDeclaration(thisType, "o", cast);
+		JavaFile.Term retCondition = null;
+		for(int i=0;i!=fieldNames.length;++i) {
+			String field = fieldNames[i];
+			JavaFile.Term lhs = new JavaFile.VariableAccess(field);
+			JavaFile.Term rhs = new JavaFile.FieldAccess(oVar, field);
+			JavaFile.Term clause = translateEquality(recT.getField(field),lhs,rhs);
+			retCondition = retCondition == null ? clause
+					: new JavaFile.Operator(JavaFile.Operator.Kind.AND, retCondition, clause);
+		}
+		JavaFile.Return retStmt = new JavaFile.Return(retCondition);
+		trueBranch.getTerms().add(decl);
+		trueBranch.getTerms().add(retStmt);
+		// Construct method body
+		JavaFile.Block block = new JavaFile.Block();
+		block.getTerms().add(ifStmt);
+		block.getTerms().add(new JavaFile.Return(new JavaFile.Constant(false)));
+		// Construct method
+		JavaFile.Method method = new JavaFile.Method("equals", JavaFile.BOOLEAN);
+		method.getModifiers().add(JavaFile.Modifier.PUBLIC);
+		method.getParameters().add(new Pair<JavaFile.Type,String>(new JavaFile.Reference("Object"),"other"));
+		method.setBody(block);
+		//
+		typeClass.getDeclarations().add(method);
+	}
+
+	private JavaFile.Term translateEquality(Type type, JavaFile.Term lhs, JavaFile.Term rhs) throws ResolveError {
+		if (isDynamicallySized(type)) {
+			return new JavaFile.Invoke(lhs, new String[] {"equals"}, rhs);
+		} else {
+			return new JavaFile.Operator(JavaFile.Operator.Kind.EQ, lhs, rhs);
+		}
+	}
 	//
 	// private void writeRecordHashCode(int indent, String name, Type.Record
 	// recT) {

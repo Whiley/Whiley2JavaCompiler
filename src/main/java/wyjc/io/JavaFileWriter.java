@@ -229,10 +229,14 @@ public class JavaFileWriter {
 	private void writeExpression(JavaFile.Term term) {
 		if(term instanceof JavaFile.ArrayAccess) {
 			writeArrayAccess((JavaFile.ArrayAccess) term);
+		} else if(term instanceof JavaFile.Cast) {
+			writeCast((JavaFile.Cast) term);
 		} else if(term instanceof JavaFile.Constant) {
 			writeConstant((JavaFile.Constant) term);
 		} else if(term instanceof JavaFile.FieldAccess) {
 			writeFieldAccess((JavaFile.FieldAccess) term);
+		} else if(term instanceof JavaFile.InstanceOf) {
+			writeInstanceOf((JavaFile.InstanceOf) term);
 		} else if(term instanceof JavaFile.Invoke) {
 			writeInvoke((JavaFile.Invoke) term);
 		} else if(term instanceof JavaFile.New) {
@@ -251,6 +255,13 @@ public class JavaFileWriter {
 		out.print("[");
 		writeExpression(term.getIndex());
 		out.print("]");
+	}
+
+	private void writeCast(JavaFile.Cast term) {
+		out.print("(");
+		writeType(term.getType());
+		out.print(") ");
+		writeExpression(term.getSource());
 	}
 
 	private void writeConstant(JavaFile.Constant term) {
@@ -272,6 +283,13 @@ public class JavaFileWriter {
 		out.print(".");
 		out.print(term.getField());
 	}
+
+	private void writeInstanceOf(JavaFile.InstanceOf term) {
+		writeExpression(term.getLefthandSide());
+		out.print(" instanceof ");
+		writeType(term.getRighthandSide());
+	}
+
 	private void writeInvoke(JavaFile.Invoke term) {
 		JavaFile.Term receiver = term.getReceiver();
 		if(receiver != null) {

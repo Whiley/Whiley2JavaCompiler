@@ -266,6 +266,24 @@ public class JavaFile extends AbstractCompilationUnit {
 	public static class Break implements Term {
 	}
 
+	public static class Cast implements Term {
+		private Type type;
+		private Term source;
+
+		public Cast(Type type, Term source) {
+			this.type = type;
+			this.source = source;
+		}
+
+		public Type getType() {
+			return type;
+		}
+
+		public Term getSource() {
+			return source;
+		}
+	}
+
 	public static class Continue implements Term {
 	}
 
@@ -326,6 +344,24 @@ public class JavaFile extends AbstractCompilationUnit {
 
 		public Block getFalseBranch() {
 			return falseBranch;
+		}
+	}
+
+	public static class InstanceOf implements Term {
+		private Term lhs;
+		private Type rhs;
+
+		public InstanceOf(Term lhs, Type rhs) {
+			this.lhs = lhs;
+			this.rhs = rhs;
+		}
+
+		public Term getLefthandSide() {
+			return lhs;
+		}
+
+		public Type getRighthandSide() {
+			return rhs;
 		}
 	}
 
