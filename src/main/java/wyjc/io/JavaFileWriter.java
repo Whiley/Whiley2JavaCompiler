@@ -139,6 +139,8 @@ public class JavaFileWriter {
 			writeBreak(indent,(JavaFile.Break) term);
 		} else if(term instanceof JavaFile.Continue) {
 			writeContinue(indent,(JavaFile.Continue) term);
+		} else if(term instanceof JavaFile.DoWhile) {
+			writeDoWhile(indent,(JavaFile.DoWhile) term);
 		} else if(term instanceof JavaFile.If) {
 			writeIf(indent,(JavaFile.If) term);
 		} else if(term instanceof JavaFile.Return) {
@@ -171,6 +173,14 @@ public class JavaFileWriter {
 
 	private void writeContinue(int indent, JavaFile.Continue term) {
 		out.print("continue;");
+	}
+
+	private void writeDoWhile(int indent, JavaFile.DoWhile term) {
+		out.print("do");
+		writeBlock(indent, term.getBody());
+		out.print(" while(");
+		writeExpression(term.getCondition());
+		out.println(");");
 	}
 
 	private void writeIf(int indent, JavaFile.If term) {

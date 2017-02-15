@@ -305,6 +305,24 @@ public class JavaFile extends AbstractCompilationUnit {
 	}
 
 
+	public static class DoWhile implements Term {
+		private Block body;
+		private Term condition;
+
+		public DoWhile(Block body, Term condition) {
+			this.condition = condition;
+			this.body = body;
+		}
+
+		public Term getCondition() {
+			return condition;
+		}
+
+		public Block getBody() {
+			return body;
+		}
+	}
+
 	public static class FieldAccess implements Term {
 		private Term src;
 		private String field;

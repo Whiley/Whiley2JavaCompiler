@@ -329,8 +329,8 @@ public class JavaCompileTask implements Build.Task {
 				return translateContinue((Location<Bytecode.Continue>) c);
 			//case Bytecode.OPCODE_debug:
 				// return translateDebug((Location<Bytecode.Debug>) c);
-			//case Bytecode.OPCODE_dowhile:
-				// return translateDoWhile((Location<Bytecode.DoWhile>) c);
+			case Bytecode.OPCODE_dowhile:
+				 return translateDoWhile((Location<Bytecode.DoWhile>) c);
 			//case Bytecode.OPCODE_fail:
 				// return translateFail((Location<Bytecode.Fail>) c);
 			case Bytecode.OPCODE_if:
@@ -387,6 +387,12 @@ public class JavaCompileTask implements Build.Task {
 
 	private JavaFile.Term translateContinue(Location<Bytecode.Continue> stmt) {
 		return new JavaFile.Continue();
+	}
+
+	private JavaFile.Term translateDoWhile(Location<Bytecode.DoWhile> stmt) {
+		JavaFile.Term condition = translateExpression(stmt.getOperand(0));
+		JavaFile.Block body = translateBlock(stmt.getBlock(0));
+		return new JavaFile.DoWhile(body, condition);
 	}
 
 	private JavaFile.Term translateIf(Location<Bytecode.If> stmt) {
@@ -567,6 +573,17 @@ public class JavaCompileTask implements Build.Task {
 			// In this case, we have a fixed-sized arguments. Therefore, we can
 			// employ Java's underlying arithmetic operators, comparators, etc.
 			JavaFile.Operator.Kind k = translate2JavaOperator(kind);
+			// Apply any necessary coercions
+			switch(kind) {
+			case LEFTSHIFT:
+			case RIGHTSHIFT: {
+				// FIXME: in principle, this should be unnecesssary as the
+				// WhileyCompiler should take care of this.
+				children.set(1,toInt(children.get(1),expr.getOperand(1).getType()));
+				break;
+			}
+
+			}
 			return new JavaFile.Operator(k, children);
 		}
 	}
@@ -679,9 +696,13 @@ public class JavaCompileTask implements Build.Task {
 		return new JavaFile.New(type, children);
 	}
 
-	private JavaFile.Term translateArrayLength(Location<Bytecode.Operator> expr) {
+	private JavaFile.Term translateArrayLength(Location<Bytecode.Operator> expr) throws ResolveError {
 		JavaFile.Term src = translateExpression(expr.getOperand(0));
-		return new JavaFile.FieldAccess(src, "length");
+		// FIXME: converting the array length to a big integer is a temporary
+		// fix. It works around the fact that the Whiley compiler types the
+		// return of an array length expression as just "int", when in fact it
+		// should be: "usize".
+		return toBigInteger(new JavaFile.FieldAccess(src, "length"), TYPE_I32);
 	}
 
 	private JavaFile.Term translateConvert(Location<Bytecode.Convert> expr) {
@@ -856,9 +877,10 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	private JavaFile.Term translateRecordConstructor(Location<Bytecode.Operator> expr) {
-		Type.EffectiveRecord t = (Type.EffectiveRecord) expr.getType();
-		String[] fields = t.getFieldNames();
+		//Type.EffectiveRecord t = (Type.EffectiveRecord) expr.getType();
+		//String[] fields = t.getFieldNames();
 		Location<?>[] operands = expr.getOperands();
+		System.out.println("GOT: " + expr.getType());
 		// out.print("{");
 		// for (int i = 0; i != operands.length; ++i) {
 		// if (i != 0) {
