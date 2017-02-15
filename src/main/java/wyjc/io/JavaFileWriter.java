@@ -251,6 +251,8 @@ public class JavaFileWriter {
 			writeInvoke((JavaFile.Invoke) term);
 		} else if(term instanceof JavaFile.New) {
 			writeNew((JavaFile.New) term);
+		} else if(term instanceof JavaFile.NewArray) {
+			writeNewArray((JavaFile.NewArray) term);
 		} else if(term instanceof JavaFile.Operator) {
 			writeOperator((JavaFile.Operator) term);
 		} else if(term instanceof JavaFile.VariableAccess) {
@@ -395,6 +397,21 @@ public class JavaFileWriter {
 	private void writeNew(JavaFile.New term) {
 		out.print("new ");
 		writeType(term.getType());
+		List<JavaFile.Term> parameters = term.getParameters();
+		out.print("(");
+		writeArguments(parameters);
+		out.print(")");
+	}
+
+	private void writeNewArray(JavaFile.NewArray term) {
+		out.print("new ");
+		writeType(term.getType().getElement());
+		out.print("[");
+		JavaFile.Term sizeOperand = term.getSizeOperand();
+		if(sizeOperand != null) {
+			writeExpression(sizeOperand);
+		}
+		out.print("]");
 		List<JavaFile.Term> initialisers = term.getInitialisers();
 		if(initialisers != null) {
 			out.print("{");

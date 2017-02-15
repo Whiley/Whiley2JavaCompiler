@@ -30,6 +30,7 @@ import wyil.lang.Bytecode.VariableDeclaration;
 import wyil.lang.SyntaxTree.Location;
 import wyil.util.TypeSystem;
 import wyjc.core.JavaFile;
+import wyjc.util.JavaCodeGenerator;
 
 public class JavaCompileTask implements Build.Task {
 	/**
@@ -49,6 +50,11 @@ public class JavaCompileTask implements Build.Task {
 	 * For logging information.
 	 */
 	private Logger logger = Logger.NULL;
+
+	/**
+	 * The set of names for all anonymous structs and unions encountered.
+	 */
+	private HashMap<Type, JavaFile.Class> unnamedTypes;
 
 	public JavaCompileTask(Build.Project project) {
 		this.project = project;
@@ -103,6 +109,8 @@ public class JavaCompileTask implements Build.Task {
 	private JavaFile build(Path.Entry<WyilFile> source, Path.Entry<JavaFile> target) throws IOException {
 		// Read the source file, which forces it to be parsed, etc.
 		WyilFile wf = source.read();
+		// Reset the list of unnamed types
+		unnamedTypes = new HashMap<>();
 		// Create an (empty) output file to contains the generated Java source
 		// code.
 		JavaFile jf = new JavaFile(target);
@@ -132,6 +140,11 @@ public class JavaCompileTask implements Build.Task {
 				throw new IllegalArgumentException(e);
 			}
 		}
+		// Add all generated unnamed types
+		for(Map.Entry<Type, JavaFile.Class> e : unnamedTypes.entrySet()) {
+			jcd.getDeclarations().add(e.getValue());
+		}
+		//
 		jf.getDeclarations().add(jcd);
 		return jf;
 	}
@@ -139,145 +152,22 @@ public class JavaCompileTask implements Build.Task {
 	private void build(WyilFile.Type decl, JavaFile.Class parent) throws ResolveError {
 		Type type = decl.type();
 
-		// FIXME: expand nominal types
+		// FIXME: deal with Nominal types ?
 
 		if (type instanceof Type.Record) {
-			Type.Record recT = (Type.Record) type;
-			JavaFile.Class typeClass = new JavaFile.Class(decl.name());
-			addModifiers(typeClass, decl.modifiers());
-			typeClass.getModifiers().add(JavaFile.Modifier.STATIC);
-			typeClass.getModifiers().add(JavaFile.Modifier.FINAL);
-			// Write field declartions
-			writeFieldDeclarations(typeClass,recT);
-			writeRecordConstructor(typeClass,decl.name(),recT);
-			writeRecordEquals(typeClass,decl.name(),recT);
-			// writeRecordHashCode(indent,decl.name(),recT);
-			// writeRecordClone(indent,decl.name(),recT);
-			parent.getDeclarations().add(typeClass);
+			//
+			List<JavaFile.Field> fields = translateFieldDeclarations((Type.Record) type);
+			JavaFile.Class struct = JavaCodeGenerator.generateStruct(decl.name(), fields);
+			struct.getModifiers().addAll(translateModifiers(decl.modifiers()));
+			parent.getDeclarations().add(struct);
+		} else if(type instanceof Type.Union) {
+			Type.Union ut = (Type.Union) type;
+			JavaFile.Type[] bounds = translateTypes(ut.bounds());
+			JavaFile.Class union = JavaCodeGenerator.generateUnion(decl.name(), bounds);
+			union.getModifiers().addAll(translateModifiers(decl.modifiers()));
+			parent.getDeclarations().add(union);
 		}
 	}
-
-	private void writeFieldDeclarations(JavaFile.Class typeClass, Type.Record recT) {
-		String[] fields = recT.getFieldNames();
-		for(int i=0;i!=recT.size();++i) {
-			String fieldName = fields[i];
-			JavaFile.Type fieldType = translateType(recT.getField(fieldName));
-			JavaFile.Field field = new JavaFile.Field(fieldType,fieldName);
-			field.getModifiers().add(JavaFile.Modifier.PRIVATE);
-			typeClass.getDeclarations().add(field);
-		}
-	}
-
-	private void writeRecordConstructor(JavaFile.Class typeClass, String name, Type.Record
-			recT) {
-		JavaFile.Constructor constructor = new JavaFile.Constructor(name);
-		List<Pair<JavaFile.Type,String>> parameters = constructor.getParameters();
-		String[] fields = recT.getFieldNames();
-		for(int i=0;i!=recT.size();++i) {
-			String fieldName = fields[i];
-			JavaFile.Type fieldType = translateType(recT.getField(fieldName));
-			parameters.add(new Pair<>(fieldType,fieldName));
-		}
-		JavaFile.Block body = new JavaFile.Block();
-		for(int i=0;i!=recT.size();++i) {
-			String fieldName = fields[i];
-			JavaFile.Term lhs = new JavaFile.FieldAccess(new JavaFile.VariableAccess("this"),fieldName);
-			JavaFile.VariableAccess rhs = new JavaFile.VariableAccess(fieldName);
-			JavaFile.Assignment initialiser = new JavaFile.Assignment(lhs, rhs);
-			body.getTerms().add(initialiser);
-		}
-		constructor.setBody(body);
-		constructor.getModifiers().add(JavaFile.Modifier.PUBLIC);
-		typeClass.getDeclarations().add(constructor);
-	}
-
-	private void writeRecordEquals(JavaFile.Class typeClass, String name, Type.Record recT) throws ResolveError {
-		String[] fieldNames = recT.getFieldNames();
-		JavaFile.VariableAccess otherVar = new JavaFile.VariableAccess("other");
-		JavaFile.VariableAccess oVar = new JavaFile.VariableAccess("o");
-		// Construct instanceof test
-		JavaFile.Type thisType = new JavaFile.Reference(name);
-		JavaFile.Term condition = new JavaFile.InstanceOf(otherVar,thisType);
-		JavaFile.Block trueBranch = new JavaFile.Block();
-		JavaFile.If ifStmt = new JavaFile.If(condition, trueBranch, null);
-		// Construct conditional body
-		JavaFile.Cast cast = new JavaFile.Cast(thisType,otherVar);
-		JavaFile.VariableDeclaration decl = new JavaFile.VariableDeclaration(thisType, "o", cast);
-		JavaFile.Term retCondition = null;
-		for(int i=0;i!=fieldNames.length;++i) {
-			String field = fieldNames[i];
-			JavaFile.Term lhs = new JavaFile.VariableAccess(field);
-			JavaFile.Term rhs = new JavaFile.FieldAccess(oVar, field);
-			JavaFile.Term clause = translateEquality(recT.getField(field),lhs,rhs);
-			retCondition = retCondition == null ? clause
-					: new JavaFile.Operator(JavaFile.Operator.Kind.AND, retCondition, clause);
-		}
-		JavaFile.Return retStmt = new JavaFile.Return(retCondition);
-		trueBranch.getTerms().add(decl);
-		trueBranch.getTerms().add(retStmt);
-		// Construct method body
-		JavaFile.Block block = new JavaFile.Block();
-		block.getTerms().add(ifStmt);
-		block.getTerms().add(new JavaFile.Return(new JavaFile.Constant(false)));
-		// Construct method
-		JavaFile.Method method = new JavaFile.Method("equals", JavaFile.BOOLEAN);
-		method.getModifiers().add(JavaFile.Modifier.PUBLIC);
-		method.getParameters().add(new Pair<JavaFile.Type,String>(new JavaFile.Reference("Object"),"other"));
-		method.setBody(block);
-		//
-		typeClass.getDeclarations().add(method);
-	}
-
-	private JavaFile.Term translateEquality(Type type, JavaFile.Term lhs, JavaFile.Term rhs) throws ResolveError {
-		if (isDynamicallySized(type)) {
-			return new JavaFile.Invoke(lhs, new String[] {"equals"}, rhs);
-		} else {
-			return new JavaFile.Operator(JavaFile.Operator.Kind.EQ, lhs, rhs);
-		}
-	}
-	//
-	// private void writeRecordHashCode(int indent, String name, Type.Record
-	// recT) {
-	// tabIndent(indent+1);
-	// out.println("@Override");
-	// tabIndent(indent+1);
-	// out.println("public int hashCode() {");
-	// tabIndent(indent+2);
-	// out.print("return ");
-	// String[] fields = recT.getFieldNames();
-	// for(int i=0;i!=recT.size();++i) {
-	// if(i != 0) {
-	// out.print(" ^ ");
-	// }
-	// String field = fields[i];
-	// out.print(field);
-	// }
-	// out.println(";");
-	// tabIndent(indent+1);
-	// out.println("}");
-	// out.println();
-	// }
-	//
-	// private void writeRecordClone(int indent, String name, Type.Record recT)
-	// {
-	// tabIndent(indent+1);
-	// out.println("@Override");
-	// tabIndent(indent+1);
-	// out.println("public Object clone() {");
-	// tabIndent(indent+2);
-	// out.print("return new " + name + "(");
-	// String[] fields = recT.getFieldNames();
-	// for(int i=0;i!=recT.size();++i) {
-	// if(i != 0) {
-	// out.print(",");
-	// }
-	// String field = fields[i];
-	// out.print(field);
-	// }
-	// out.println(");");
-	// tabIndent(indent+1);
-	// out.println("}");
-	// }
 
 	private void build(WyilFile.FunctionOrMethod decl, JavaFile.Class parent) {
 		SyntaxTree tree = decl.getTree();
@@ -285,7 +175,7 @@ public class JavaCompileTask implements Build.Task {
 		JavaFile.Type returnType = translateReturnTypes(ft.returns());
 		//
 		JavaFile.Method method = new JavaFile.Method(decl.name(), returnType);
-		addModifiers(method, decl.modifiers());
+		method.getModifiers().addAll(translateModifiers(decl.modifiers()));
 		method.getModifiers().add(JavaFile.Modifier.STATIC);
 		//
 		for (int i = 0; i != ft.params().length; ++i) {
@@ -692,8 +582,8 @@ public class JavaCompileTask implements Build.Task {
 		for (int i = 0; i != expr.numberOfOperands(); ++i) {
 			children.add(translateExpression(expr.getOperand(i)));
 		}
-		JavaFile.Type type = translateType(expr.getType());
-		return new JavaFile.New(type, children);
+		JavaFile.Array type = (JavaFile.Array) translateType(expr.getType());
+		return new JavaFile.NewArray(type, null, children);
 	}
 
 	private JavaFile.Term translateArrayLength(Location<Bytecode.Operator> expr) throws ResolveError {
@@ -807,14 +697,14 @@ public class JavaCompileTask implements Build.Task {
 		for (int i = 0; i != elements.size(); ++i) {
 			children.add(translateConstant(elements.get(i)));
 		}
-		JavaFile.Type type = translateType(array.type());
-		return new JavaFile.New(type, children);
+		JavaFile.Array type = (JavaFile.Array) translateType(array.type());
+		return new JavaFile.NewArray(type, null, children);
 	}
 
 	private JavaFile.Term translateFieldLoad(Location<Bytecode.FieldLoad> expr) {
-		// writeBracketedExpression(expr.getOperand(0));
-		// out.print("." + expr.getBytecode().fieldName());
-		return null;
+		Bytecode.FieldLoad fld = expr.getBytecode();
+		JavaFile.Term source = translateExpression(expr.getOperand(0));
+		return new JavaFile.FieldAccess(source, fld.fieldName());
 	}
 
 	private JavaFile.Term translateIndirectInvoke(Location<Bytecode.IndirectInvoke> expr) {
@@ -876,22 +766,26 @@ public class JavaCompileTask implements Build.Task {
 		return null;
 	}
 
-	private JavaFile.Term translateRecordConstructor(Location<Bytecode.Operator> expr) {
-		//Type.EffectiveRecord t = (Type.EffectiveRecord) expr.getType();
-		//String[] fields = t.getFieldNames();
+	private JavaFile.Term translateRecordConstructor(Location<Bytecode.Operator> expr) throws ResolveError {
+		Type type = expr.getType();
+		JavaFile.Reference jType;
+		//
+		if (type instanceof Type.Nominal) {
+			Type.Nominal nt = (Type.Nominal) type;
+			jType = new JavaFile.Reference(nt.name().name());
+		} else if(type instanceof Type.Record) {
+			JavaFile.Class unnamedStruct = generateAnonymousStruct((Type.Record) type);
+			jType = new JavaFile.Reference(unnamedStruct.getName());
+		} else {
+			throw new IllegalArgumentException("Not sure what to do here");
+		}
+		// Construct the appropriate record now
 		Location<?>[] operands = expr.getOperands();
-		System.out.println("GOT: " + expr.getType());
-		// out.print("{");
-		// for (int i = 0; i != operands.length; ++i) {
-		// if (i != 0) {
-		// out.print(", ");
-		// }
-		// out.print(fields[i]);
-		// out.print(" ");
-		// writeExpression(operands[i]);
-		// }
-		// out.print("}");
-		return null;
+		ArrayList<JavaFile.Term> parameters = new ArrayList<>();
+		for (int i = 0; i != operands.length; ++i) {
+			parameters.add(translateExpression(expr.getOperand(i)));
+		}
+		return new JavaFile.New(jType, parameters);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -929,14 +823,16 @@ public class JavaCompileTask implements Build.Task {
 		return t;
 	}
 
-	private static void addModifiers(JavaFile.Declaration d, List<Modifier> modifiers) {
+	private static List<JavaFile.Modifier> translateModifiers(List<Modifier> modifiers) {
+		ArrayList<JavaFile.Modifier> javaModifiers = new ArrayList<>();
 		for (Modifier m : modifiers) {
 			if (m == Modifier.PUBLIC) {
-				d.getModifiers().add(JavaFile.Modifier.PUBLIC);
+				javaModifiers.add(JavaFile.Modifier.PUBLIC);
 			} else if (m == Modifier.PRIVATE) {
-				d.getModifiers().add(JavaFile.Modifier.PRIVATE);
+				javaModifiers.add(JavaFile.Modifier.PRIVATE);
 			}
 		}
+		return javaModifiers;
 	}
 
 	/**
@@ -988,10 +884,41 @@ public class JavaCompileTask implements Build.Task {
 			} catch (IOException e) {
 				throw new IllegalArgumentException(e);
 			}
+		} else if (type instanceof Type.Record) {
+			JavaFile.Class struct = generateAnonymousStruct((Type.Record)type);
+			return new JavaFile.Reference(struct.getName());
 		} else {
 			// Default
 			return new JavaFile.Reference("Object");
 		}
+	}
+
+	private JavaFile.Type[] translateTypes(Type... types) {
+		JavaFile.Type[] rs = new JavaFile.Type[types.length];
+		for(int i=0;i!=types.length;++i) {
+			rs[i] = translateType(types[i]);
+		}
+		return rs;
+	}
+	private JavaFile.Class generateAnonymousStruct(Type.Record type) {
+		JavaFile.Class r = unnamedTypes.get(type);
+		if(r == null) {
+			List<JavaFile.Field> fields = translateFieldDeclarations(type);
+			r = JavaCodeGenerator.generateStruct("Struct" + unnamedTypes.size(), fields);
+			unnamedTypes.put(type, r);
+		}
+		return r;
+	}
+
+	private List<JavaFile.Field> translateFieldDeclarations(Type.Record type) {
+		ArrayList<JavaFile.Field> fields = new ArrayList<>();
+		String[] fieldNames = type.getFieldNames();
+		for (int i = 0; i != fieldNames.length; ++i) {
+			String fieldName = fieldNames[i];
+			JavaFile.Type fieldType = translateType(type.getField(fieldName));
+			fields.add(new JavaFile.Field(fieldType, fieldName));
+		}
+		return fields;
 	}
 
 	public boolean isDynamicallySized(Type type) throws ResolveError {

@@ -420,21 +420,45 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
-	public static class New implements Term {
-		private Type type;
+	public static class NewArray implements Term {
+		private Array type;
+		private Term size;
 		private List<Term> initialisers;
 
-		public New(Type type, List<Term> initialisers) {
+		public NewArray(Array type, Term size, List<Term> initialisers) {
 			this.type = type;
+			this.size = size;
 			this.initialisers = new ArrayList<>(initialisers);
+		}
+
+		public Array getType() {
+			return type;
+		}
+
+		public Term getSizeOperand() {
+			return size;
+		}
+
+		public List<Term> getInitialisers() {
+			return initialisers;
+		}
+	}
+
+	public static class New implements Term {
+		private Reference type;
+		private List<Term> parameters;
+
+		public New(Reference type, List<Term> parameters) {
+			this.type = type;
+			this.parameters = new ArrayList<>(parameters);
 		}
 
 		public Type getType() {
 			return type;
 		}
 
-		public List<Term> getInitialisers() {
-			return initialisers;
+		public List<Term> getParameters() {
+			return parameters;
 		}
 	}
 
