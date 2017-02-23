@@ -406,7 +406,7 @@ public class JavaCompileTask implements Build.Task {
 			case Bytecode.OPCODE_lambda:
 				return translateLambda((Location<Bytecode.Lambda>) expr);
 			case Bytecode.OPCODE_record:
-				return translateRecordConstructor((Location<Bytecode.Operator>) expr);
+				return translateRecordInitialiser((Location<Bytecode.Operator>) expr);
 			case Bytecode.OPCODE_all:
 			case Bytecode.OPCODE_some:
 				return translateQuantifier((Location<Bytecode.Quantifier>) expr);
@@ -766,7 +766,7 @@ public class JavaCompileTask implements Build.Task {
 		return null;
 	}
 
-	private JavaFile.Term translateRecordConstructor(Location<Bytecode.Operator> expr) throws ResolveError {
+	private JavaFile.Term translateRecordInitialiser(Location<Bytecode.Operator> expr) throws ResolveError {
 		Type type = expr.getType();
 		JavaFile.Reference jType;
 		//
