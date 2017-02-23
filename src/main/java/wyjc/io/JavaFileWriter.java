@@ -21,7 +21,6 @@ public class JavaFileWriter {
 	}
 
 	public void write(JavaFile file) {
-		writeImports();
 		for(JavaFile.Declaration d : file.getDeclarations()) {
 			write(0,(JavaFile.Declaration)d);
 		}
@@ -29,12 +28,10 @@ public class JavaFileWriter {
 		out.close();
 	}
 
-	private void writeImports() {
-		out.println("import java.math.BigInteger;");
-	}
-
 	private void write(int indent, JavaFile.Declaration d) {
-		if(d instanceof JavaFile.Class) {
+		if(d instanceof JavaFile.Import) {
+			write((JavaFile.Import)d);
+ 		} else if(d instanceof JavaFile.Class) {
 			write(indent,(JavaFile.Class)d);
  		} else if(d instanceof JavaFile.Method) {
 			write(indent,(JavaFile.Method)d);
@@ -45,6 +42,18 @@ public class JavaFileWriter {
  		} else {
  			throw new RuntimeException("Unknown declaration encountered");
  		}
+	}
+
+	private void write(JavaFile.Import importDecl) {
+		out.print("import ");
+		List<String> components = importDecl.getComponents();
+		for(int i=0;i!=components.size();++i) {
+			if(i != 0) {
+				out.print(".");
+			}
+			out.print(components.get(i));
+		}
+		out.println(";");
 	}
 
 	private void write(int indent, JavaFile.Class classDecl) {

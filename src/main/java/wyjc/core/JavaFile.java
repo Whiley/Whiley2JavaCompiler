@@ -8,6 +8,7 @@ package wyjc.core;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import wybs.lang.CompilationUnit;
@@ -112,7 +113,27 @@ public class JavaFile extends AbstractCompilationUnit {
 			return modifiers;
 		}
 	}
+	public static class Import implements Declaration {
+		private final List<String> components;
 
+		public Import(List<String> components) {
+			this.components = new ArrayList<>(components);
+		}
+
+		public Import(String... components) {
+			this.components = Arrays.asList(components);
+		}
+
+		public List<String> getComponents() {
+			return components;
+		}
+
+		@Override
+		public List<Modifier> getModifiers() {
+			return Collections.EMPTY_LIST;
+		}
+
+	}
 	public static class Class extends AbstractDeclaration implements Declaration {
 
 

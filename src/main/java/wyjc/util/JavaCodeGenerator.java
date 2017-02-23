@@ -178,7 +178,7 @@ public class JavaCodeGenerator {
 		if (type instanceof JavaFile.Primitive) {
 			return new JavaFile.Operator(JavaFile.Operator.Kind.EQ, lhs, rhs);
 		} else if (type instanceof JavaFile.Array) {
-			return new JavaFile.Invoke(null, new String[] { "Array", "equals" }, lhs, rhs);
+			return new JavaFile.Invoke(null, new String[] { "Arrays", "equals" }, lhs, rhs);
 		} else {
 			return new JavaFile.Invoke(lhs, new String[] { "equals" }, rhs);
 		}

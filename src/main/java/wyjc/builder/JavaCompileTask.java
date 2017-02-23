@@ -115,8 +115,11 @@ public class JavaCompileTask implements Build.Task {
 		// code.
 		JavaFile jf = new JavaFile(target);
 
-		// Add package declaration
+		// Add package declaration?
+
 		// Add imports
+		jf.getDeclarations().add(new JavaFile.Import("java","math","BigInteger"));
+		jf.getDeclarations().add(new JavaFile.Import("java","util","Arrays"));
 
 		String className = wf.getEntry().id().last();
 		JavaFile.Class jcd = new JavaFile.Class(className);
