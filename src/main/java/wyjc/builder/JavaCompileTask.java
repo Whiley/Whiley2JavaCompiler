@@ -473,7 +473,12 @@ public class JavaCompileTask implements Build.Task {
 				// FIXME: in principle, this should be unnecesssary as the
 				// WhileyCompiler should take care of this.
 				children.set(1,toInt(children.get(1),expr.getOperand(1).getType()));
-				break;
+			}
+			case BITWISEXOR:
+			case BITWISEOR:
+			case BITWISEAND: {
+				JavaFile.Term result = new JavaFile.Operator(k, children);
+				return new JavaFile.Cast(JavaFile.BYTE, result);
 			}
 
 			}

@@ -282,7 +282,7 @@ public class JavaFileWriter {
 		out.print("(");
 		writeType(term.getType());
 		out.print(") ");
-		writeExpression(term.getSource());
+		writeExpressionWithBraces(term.getSource());
 	}
 
 	private void writeConstant(JavaFile.Constant term) {
@@ -294,6 +294,10 @@ public class JavaFileWriter {
 		} else if(value instanceof Long) {
 			out.print(term.getValue());
 			out.print("L");
+		} else if(value instanceof Byte){
+			Byte b = (Byte) value;
+			out.print("(byte) 0b");
+			out.print(Integer.toBinaryString(b & 0xFF));
 		} else {
 			out.print(term.getValue());
 		}
