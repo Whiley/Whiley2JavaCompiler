@@ -69,7 +69,7 @@ public class RuntimeValidTests {
 	/**
 	 * Ignored tests and a reason why we ignore them.
 	 */
-	public final static Map<String, String> IGNORED = new HashMap<String, String>();
+	public final static Map<String, String> IGNORED = new HashMap<>();
 
 	static {
 		IGNORED.put("Coercion_Valid_8", "#681");
@@ -143,12 +143,13 @@ public class RuntimeValidTests {
 	 * @throws IOException
  	 */
  	protected void runTest(String name) throws IOException {
+ 		File whileySrcDir = new File(WHILEY_SRC_DIR);
  		// this will need to turn on verification at some point.
  		String whileyFilename = WHILEY_SRC_DIR + File.separatorChar + name + ".whiley";
 
 		// Compile to Java Bytecode
 		Pair<Compile.Result, String> p = compile(
-				WHILEY_SRC_DIR, // location of source directory
+				whileySrcDir,    // location of source directory
 				whileyFilename); // name of test to compile
 
 		Compile.Result r = p.first();
@@ -182,7 +183,7 @@ public class RuntimeValidTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static Pair<Compile.Result,String> compile(String whileydir, String... args) throws IOException {
+	public static Pair<Compile.Result,String> compile(File whileydir, String... args) throws IOException {
 		ByteArrayOutputStream syserr = new ByteArrayOutputStream();
 		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
 		Content.Registry registry = new wyc.Activator.Registry();
@@ -193,7 +194,7 @@ public class RuntimeValidTests {
 		byte[] errBytes = syserr.toByteArray();
 		byte[] outBytes = sysout.toByteArray();
 		String output = new String(errBytes) + new String(outBytes);
-		return new Pair<Compile.Result,String>(result,output);
+		return new Pair<>(result,output);
 	}
 
 
