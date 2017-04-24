@@ -55,6 +55,17 @@ public class JvmCompile extends Compile {
 		super(registry, logger, sysout, syserr);
 	}
 
+
+	@Override
+	public String getName() {
+		return "jvmcompile";
+	}
+
+	@Override
+	public String getDescription() {
+		return "Compile Whiley source files to JVM class files";
+	}
+
 	public void setClassdir(File dir) throws IOException {
 		this.classdir = new DirectoryRoot(dir,registry);
 	}

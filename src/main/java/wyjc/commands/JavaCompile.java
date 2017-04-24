@@ -42,6 +42,16 @@ public class JavaCompile extends Compile {
 		super(registry, logger, sysout, syserr);
 	}
 
+	@Override
+	public String getName() {
+		return "javacompile";
+	}
+
+	@Override
+	public String getDescription() {
+		return "Compile Whiley source files to Java source files";
+	}
+
 	/**
 	 * Add build rules necessary for compiling whiley source files into binary
 	 * wyil files.
