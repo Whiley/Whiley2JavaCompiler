@@ -44,9 +44,10 @@ public final class WyArray extends java.util.ArrayList {
 	}
 
 	WyArray(java.util.Collection items) {
-		super(items);		
+		super(items);
 	}
 
+	@Override
 	public String toString() {
 		String r = "[";
 		boolean firstTime=true;
@@ -55,7 +56,7 @@ public final class WyArray extends java.util.ArrayList {
 				r += ", ";
 			}
 			firstTime=false;
-			r += whiley.lang.Any$native.toRealString(o);
+			r += Util.toRealString(o);
 		}
 		return r + "]";
 	}
@@ -68,9 +69,9 @@ public final class WyArray extends java.util.ArrayList {
 		return list.get(index.intValue());
 	}
 
-	public static WyArray set(WyArray list, final BigInteger index, final Object value) {		
+	public static WyArray set(WyArray list, final BigInteger index, final Object value) {
 		// Clone the list to be safe.
-		list = new WyArray(list);		
+		list = new WyArray(list);
 		list.set(index.intValue(),value);
 		return list;
 	}
@@ -79,13 +80,13 @@ public final class WyArray extends java.util.ArrayList {
 		return BigInteger.valueOf(size());
 	}
 
-	public static WyArray append(WyArray lhs, WyArray rhs) {				
+	public static WyArray append(WyArray lhs, WyArray rhs) {
 		lhs = new WyArray(lhs);
 		lhs.addAll(rhs);
 		return lhs;
 	}
 
-	public static WyArray append(WyArray list, final Object item) {			
+	public static WyArray append(WyArray list, final Object item) {
 		list = new WyArray(list);
 		list.add(item);
 		return list;
@@ -103,7 +104,7 @@ public final class WyArray extends java.util.ArrayList {
 
 	/**
 	 * Return a list constructed from the range of two integers.
-	 * 
+	 *
 	 * @param start
 	 * @param end
 	 * @return
@@ -135,7 +136,7 @@ public final class WyArray extends java.util.ArrayList {
 
 		return l;
 	}
-	
+
 	public static WyArray generate(final BigInteger count, final Object element) {
 		int n = count.intValue();
 		WyArray list = new WyArray();
@@ -144,11 +145,11 @@ public final class WyArray extends java.util.ArrayList {
 		}
 		return list;
 	}
-	
+
 	// ========================================================
 	// Helpers
 	// ========================================================
-	
+
 	/**
 	 * This method is not intended for public consumption. It is used internally
 	 * by the compiler during object construction only.
@@ -171,7 +172,7 @@ public final class WyArray extends java.util.ArrayList {
 	 * @return
 	 */
 	public static Object internal_get(WyArray list, BigInteger index) {
-		return list.get(index.intValue());		
+		return list.get(index.intValue());
 	}
 
 	public static java.util.Iterator iterator(WyArray list) {

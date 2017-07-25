@@ -152,7 +152,7 @@ public class JvmCompileTask implements Build.Task {
 		// ========================================================================
 		// Translate files
 		// ========================================================================
-		HashSet<Path.Entry<?>> generatedFiles = new HashSet<Path.Entry<?>>();
+		HashSet<Path.Entry<?>> generatedFiles = new HashSet<>();
 
 		for (Pair<Path.Entry<?>, Path.Root> p : delta) {
 			Path.Root dst = p.second();
@@ -165,8 +165,8 @@ public class JvmCompileTask implements Build.Task {
 
 			// FIXME: put these in the context?
 
-			lambdaClasses = new ArrayList<ClassFile>();
-			lambdaMethods = new ArrayList<ClassFile.Method>();
+			lambdaClasses = new ArrayList<>();
+			lambdaMethods = new ArrayList<>();
 			ClassFile contents = build(source.read());
 			contents.methods().addAll(lambdaMethods);
 
@@ -214,14 +214,14 @@ public class JvmCompileTask implements Build.Task {
 
 		cf.attributes().add(new SourceFile(wyilFile.getEntry().location()));
 
-		boolean addMainLauncher = false;
+		WyilFile.FunctionOrMethod main = null;
 
-		constants = new HashMap<JvmConstant, Integer>();
+		constants = new HashMap<>();
 		for (WyilFile.Block blk : wyilFile.blocks()) {
 			if (blk instanceof WyilFile.FunctionOrMethod) {
 				WyilFile.FunctionOrMethod method = (WyilFile.FunctionOrMethod) blk;
 				if (method.name().equals("main")) {
-					addMainLauncher = true;
+					main = method;
 				}
 				cf.methods().addAll(build(method));
 			} else if (blk instanceof WyilFile.Type) {
@@ -231,8 +231,8 @@ public class JvmCompileTask implements Build.Task {
 
 		buildConstants(constants, lambdaClasses, cf);
 
-		if (addMainLauncher) {
-			cf.methods().add(buildMainLauncher(owner));
+		if (main != null) {
+			cf.methods().add(buildMainLauncher(main,owner));
 		}
 
 		return cf;
@@ -278,19 +278,19 @@ public class JvmCompileTask implements Build.Task {
 		}
 	}
 
-	private ClassFile.Method buildMainLauncher(JvmType.Clazz owner) {
+	private ClassFile.Method buildMainLauncher(WyilFile.FunctionOrMethod mainMethod, JvmType.Clazz owner) {
 		List<Modifier> modifiers = modifiers(ACC_PUBLIC, ACC_SYNTHETIC, ACC_STATIC);
 		JvmType.Function ft1 = new JvmType.Function(VOID, new JvmType.Array(JAVA_LANG_STRING));
 		ClassFile.Method cm = new ClassFile.Method("main", ft1, modifiers);
 		JvmType.Array strArr = new JvmType.Array(JAVA_LANG_STRING);
-		ArrayList<Bytecode> codes = new ArrayList<Bytecode>();
-		ft1 = new JvmType.Function(WHILEYRECORD, new JvmType.Array(JAVA_LANG_STRING));
+		ArrayList<Bytecode> codes = new ArrayList<>();
+		ft1 = new JvmType.Function(WHILEYARRAY, new JvmType.Array(JAVA_LANG_STRING));
 		codes.add(new Bytecode.Load(0, strArr));
-		codes.add(new Bytecode.Invoke(WHILEYUTIL, "systemConsole", ft1, Bytecode.InvokeMode.STATIC));
-		Type.Method wyft = (Type.Method) Type.Method(Collections.<String> emptySet(), Collections.<String> emptyList(),
-				new Type[] { WHILEY_SYSTEM_T }, new Type[0]);
+		codes.add(new Bytecode.Invoke(WHILEYUTIL, "sysargs", ft1, Bytecode.InvokeMode.STATIC));
+		Type.Method wyft = (Type.Method) Type.Method(Collections.<String>emptySet(), Collections.<String>emptyList(),
+				new Type[] { Type.Array(Type.T_INT) }, new Type[0]);
 		JvmType.Function ft3 = convertFunType(wyft);
-		codes.add(new Bytecode.Invoke(owner, nameMangle("main", wyft), ft3, Bytecode.InvokeMode.STATIC));
+		codes.add(new Bytecode.Invoke(owner, nameMangle("main", mainMethod.type()), ft3, Bytecode.InvokeMode.STATIC));
 		codes.add(new Bytecode.Return(null));
 
 		jasm.attributes.Code code = new jasm.attributes.Code(codes, new ArrayList(), cm);
@@ -338,7 +338,7 @@ public class JvmCompileTask implements Build.Task {
 	}
 
 	private List<ClassFile.Method> build(WyilFile.FunctionOrMethod method) {
-		ArrayList<ClassFile.Method> methods = new ArrayList<ClassFile.Method>();
+		ArrayList<ClassFile.Method> methods = new ArrayList<>();
 
 		// Firstly, check to see whether or not this is a native method. Native
 		// methods are treated specially and redirect to the same-named methods,
@@ -401,7 +401,7 @@ public class JvmCompileTask implements Build.Task {
 	 * @return
 	 */
 	private ArrayList<Bytecode> translateNativeOrExport(WyilFile.FunctionOrMethod method) {
-		ArrayList<Bytecode> bytecodes = new ArrayList<Bytecode>();
+		ArrayList<Bytecode> bytecodes = new ArrayList<>();
 		Type.FunctionOrMethod ft = method.type();
 		int slot = 0;
 		// Load all parameters provided to this method ontot he stack
@@ -447,7 +447,7 @@ public class JvmCompileTask implements Build.Task {
 		String name = nameMangle(method.name(), method.type());
 		ClassFile.Method cm = new ClassFile.Method(name, ft, modifiers);
 		// Translate the method body
-		lineNumbers = new ArrayList<LineNumberTable.Entry>();
+		lineNumbers = new ArrayList<>();
 		Context context = new Context();
 		translateBlock(method.getBody(),context);
 		// Add return bytecode (if necessary)
@@ -872,7 +872,7 @@ public class JvmCompileTask implements Build.Task {
 		// can only execute the condition expression once.
 		translateExpression(condition, context);
 		context.add(new Bytecode.Store(condition.getIndex(), type));
-		ArrayList<String> labels = new ArrayList<String>();
+		ArrayList<String> labels = new ArrayList<>();
 		// Generate the dispatch table which checks the condition value against
 		// each of the case constants. If a match is found, we branch to a given
 		// label demarking the start of the case body (which will be translated
@@ -1021,8 +1021,8 @@ public class JvmCompileTask implements Build.Task {
 	 * @return
 	 */
 	public LVal generateLVal(Location<?> lval, Context context) {
-		ArrayList<LVal.Element<?>> path = new ArrayList<LVal.Element<?>>();
-		while (lval.getOpcode() != OPCODE_varaccess) {
+		ArrayList<LVal.Element<?>> path = new ArrayList<>();
+		while (lval.getOpcode() != OPCODE_varcopy  && lval.getOpcode() != OPCODE_varmove) {
 			try {
 				wyil.lang.Bytecode.Expr code = (wyil.lang.Bytecode.Expr) lval.getBytecode();
 				switch (code.getOpcode()) {
@@ -1072,7 +1072,7 @@ public class JvmCompileTask implements Build.Task {
 
 		public LVal(int variable, List<Element<?>> path) {
 			this.variable = variable;
-			this.path = new ArrayList<Element<?>>(path);
+			this.path = new ArrayList<>(path);
 		}
 
 		public static class Element<T> {
@@ -1499,7 +1499,7 @@ public class JvmCompileTask implements Build.Task {
 			Type rhsType = ((Constant.Type) rhs.getBytecode().constant()).value();
 			Type trueBranchType = Type.Intersection(lhsType, rhsType);
 			Type falseBranchType = Type.Intersection(lhsType, Type.Negation(rhsType));
-			return new Pair<Type, Type>(trueBranchType, falseBranchType);
+			return new Pair<>(trueBranchType, falseBranchType);
 		} else {
 			return null;
 		}
@@ -1671,7 +1671,7 @@ public class JvmCompileTask implements Build.Task {
 				Bytecode.InvokeMode.INTERFACE));
 
 		// Done
-		return new Triple<String,String,String>(loopHeader, loopFooter, loopExit);
+		return new Triple<>(loopHeader, loopFooter, loopExit);
 	}
 
 	private void translateLoopEnd(Triple<String, String, String> labels, Context context) {
@@ -1738,7 +1738,7 @@ public class JvmCompileTask implements Build.Task {
 	 *         multiple return values.
 	 */
 	public List<JvmType> translateExpressions(Location<?>[] operands, Context enclosing) {
-		ArrayList<JvmType> types = new ArrayList<JvmType>();
+		ArrayList<JvmType> types = new ArrayList<>();
 		for (int i = 0; i != operands.length; ++i) {
 			Location<?> operand = operands[i];
 			// Translate operand
@@ -1767,7 +1767,7 @@ public class JvmCompileTask implements Build.Task {
 	 */
 	private void translateExpressionsToArray(Location<?>[] operands, int freeRegister, Context context) {
 		int size = countLocationTypes(operands);
-		ArrayList<Type> types = new ArrayList<Type>();
+		ArrayList<Type> types = new ArrayList<>();
 		// Translate every operand giving size elements on stack
 		for (int i = 0; i < operands.length; i = i + 1) {
 			Location<?> operand = operands[i];
@@ -1839,7 +1839,8 @@ public class JvmCompileTask implements Build.Task {
 			case OPCODE_lambda:
 				translateLambda((Location<Lambda>) expr, context);
 				break;
-			case OPCODE_varaccess:
+			case OPCODE_varcopy:
+			case OPCODE_varmove:
 				translateVariableAccess((Location<VariableAccess>) expr, context);
 				break;
 			default:
@@ -2404,7 +2405,7 @@ public class JvmCompileTask implements Build.Task {
 	 */
 	public JvmType.Function buildLambdaMethodType(Type.FunctionOrMethod type, Location<?>[] environment) {
 		JvmType.Function jvmType = convertFunType(type);
-		ArrayList<JvmType> actualParameterTypes = new ArrayList<JvmType>(jvmType.parameterTypes());
+		ArrayList<JvmType> actualParameterTypes = new ArrayList<>(jvmType.parameterTypes());
 		for (int i = 0; i != environment.length; ++i) {
 			Location<?> loc = environment[i];
 			actualParameterTypes.add(toJvmType(loc.getType()));
@@ -2456,7 +2457,8 @@ public class JvmCompileTask implements Build.Task {
 	public Location<VariableDeclaration> getVariableDeclaration(Location<?> decl) {
 		switch (decl.getOpcode()) {
 		case OPCODE_aliasdecl:
-		case OPCODE_varaccess:
+		case OPCODE_varcopy:
+		case OPCODE_varmove:
 			return getVariableDeclaration(decl.getOperand(0));
 		case OPCODE_vardecl:
 		case OPCODE_vardeclinit:
@@ -2511,9 +2513,6 @@ public class JvmCompileTask implements Build.Task {
 		context.add(new Bytecode.Pop(JAVA_LANG_OBJECT_ARRAY));
 	}
 
-	public final static Type WHILEY_SYSTEM_T = Type
-			.Nominal(new NameID(Trie.fromString("whiley/lang/System"), "Console"));
-
 	public final static JvmType.Clazz WHILEYUTIL = new JvmType.Clazz("wyjc.runtime", "Util");
 	public final static JvmType.Clazz WHILEYARRAY = new JvmType.Clazz("wyjc.runtime", "WyArray");
 	public final static JvmType.Clazz WHILEYTYPE = new JvmType.Clazz("wyjc.runtime", "WyType");
@@ -2528,6 +2527,7 @@ public class JvmCompileTask implements Build.Task {
 	private static final JvmType.Clazz JAVA_LANG_SYSTEM = new JvmType.Clazz("java.lang", "System");
 	private static final JvmType.Clazz JAVA_LANG_ITERABLE = new JvmType.Clazz("java.lang", "Iterable");
 	public static final JvmType.Array JAVA_LANG_OBJECT_ARRAY = new JvmType.Array(JAVA_LANG_OBJECT);
+	public static final JvmType.Array JAVA_LANG_STRING_ARRAY = new JvmType.Array(JAVA_LANG_STRING);
 	private static final JvmType.Clazz JAVA_UTIL_LIST = new JvmType.Clazz("java.util", "List");
 	private static final JvmType.Clazz JAVA_UTIL_SET = new JvmType.Clazz("java.util", "Set");
 	// private static final JvmType.Clazz JAVA_LANG_REFLECT_METHOD = new
@@ -2538,7 +2538,7 @@ public class JvmCompileTask implements Build.Task {
 	private static final JvmType.Clazz JAVA_UTIL_COLLECTION = new JvmType.Clazz("java.util", "Collection");
 
 	private JvmType.Function convertFunType(Type.FunctionOrMethod ft) {
-		ArrayList<JvmType> paramTypes = new ArrayList<JvmType>();
+		ArrayList<JvmType> paramTypes = new ArrayList<>();
 		for (Type pt : ft.params()) {
 			paramTypes.add(toJvmType(pt));
 		}
@@ -2644,7 +2644,7 @@ public class JvmCompileTask implements Build.Task {
 	 * @return
 	 */
 	private static List<Modifier> modifiers(Modifier... mods) {
-		ArrayList<Modifier> modifiers = new ArrayList<Modifier>();
+		ArrayList<Modifier> modifiers = new ArrayList<>();
 		for (Modifier m : mods) {
 			if (m != null) {
 				modifiers.add(m);
@@ -2824,7 +2824,7 @@ public class JvmCompileTask implements Build.Task {
 		private void construct(JvmType.Clazz owner) {
 			add(new Bytecode.New(owner));
 			add(new Bytecode.Dup(owner));
-			ArrayList<JvmType> paramTypes = new ArrayList<JvmType>();
+			ArrayList<JvmType> paramTypes = new ArrayList<>();
 			JvmType.Function ftype = new JvmType.Function(VOID, paramTypes);
 			add(new Bytecode.Invoke(owner, "<init>", ftype, Bytecode.InvokeMode.SPECIAL));
 		}

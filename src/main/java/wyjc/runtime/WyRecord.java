@@ -28,29 +28,30 @@ package wyjc.runtime;
 import java.util.*;
 
 public final class WyRecord extends HashMap<String,Object> {
-	
+
 	public WyRecord() {}
 
 	WyRecord(HashMap<String,Object> r) {
-		super(r);		
+		super(r);
 	}
 
 	// ================================================================================
 	// Generic Operations
 	// ================================================================================
 
+	@Override
 	public String toString() {
 		String r = "{";
 		boolean firstTime = true;
 
-		ArrayList<String> ss = new ArrayList<String>(keySet());
+		ArrayList<String> ss = new ArrayList<>(keySet());
 		Collections.sort(ss);
 		for (String s : ss) {
 			if (!firstTime) {
 				r = r + ",";
 			}
 			firstTime = false;
-			r = r + s + ":" + whiley.lang.Any$native.toRealString(get(s));
+			r = r + s + ":" + Util.toRealString(get(s));
 		}
 		return r + "}";
 	}
@@ -62,18 +63,18 @@ public final class WyRecord extends HashMap<String,Object> {
 	public Object get(final String field) {
 		return super.get(field);
 	}
-	
+
 	public static Object get(final WyRecord record, final String field) {
 		return record.get(field);
 	}
 
 	public static WyRecord put(WyRecord record, final String field, final Object value) {
 		record = new WyRecord(record);
-		record.put(field, value);		
+		record.put(field, value);
 		return record;
 	}
 
 	public static Object internal_get(final WyRecord record, final String field) {
-		return record.get(field);		
+		return record.get(field);
 	}
 }

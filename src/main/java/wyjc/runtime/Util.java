@@ -34,7 +34,30 @@ import java.util.Map;
 import static wyil.lang.Type.*;
 
 public class Util {
+	public static java.lang.String toRealString(Object o) {
+		if(o == null) {
+			return "null";
+		} else if(o instanceof java.lang.Byte) {
+			java.lang.Byte b = (java.lang.Byte) o;
+			return toRealString((byte)b);
+		} else {
+			return o.toString();
+		}
+	}
 
+	public static java.lang.String toRealString(byte b) {
+		java.lang.String r = "b";
+		byte v = b;
+		for(int i=0;i!=8;++i) {
+			if((v&0x1) == 1) {
+				r = "1" + r;
+			} else {
+				r = "0" + r;
+			}
+			v = (byte) (v >>> 1);
+		}
+		return r;
+	}
 	/**
 	 * This method is used to convert the arguments supplied to main (which have
 	 * type <code>String[]</code>) into an appropriate Whiley List.
@@ -71,7 +94,7 @@ public class Util {
 		}
 		return r;
 	}
-	
+
 	/**
 	 * This method is used for the special case when the left-hand side of an
 	 * equality operation may be null.
@@ -87,32 +110,33 @@ public class Util {
 	public static WyBool equal(Object o1, Object o2) {
 		return WyBool.valueOf(equals(o1,o2));
 	}
-		
+
 	public static WyBool notEqual(Object o1, Object o2) {
 		return WyBool.valueOf(!equals(o1,o2));
 	}
-	
+
 	public static WyBool lessThan(BigInteger i1, BigInteger i2) {
 		return WyBool.valueOf(i1.compareTo(i2) < 0);
 	}
-	
+
 	public static WyBool lessThanEqual(BigInteger i1, BigInteger i2) {
 		return WyBool.valueOf(i1.compareTo(i2) <= 0);
 	}
-	
+
 	public static WyBool greaterThan(BigInteger i1, BigInteger i2) {
 		return WyBool.valueOf(i1.compareTo(i2) > 0);
 	}
-	
+
 	public static WyBool greaterThanEqual(BigInteger i1, BigInteger i2) {
 		return WyBool.valueOf(i1.compareTo(i2) >= 0);
 	}
-		
+
 	public static final Comparator COMPARATOR = new Comparator();
 
 	public static final class Comparator implements java.util.Comparator {
 		private Comparator() {}
 
+		@Override
 		public final int compare(Object o1, Object o2) {
 			return Util.compare(o1,o2);
 		}
@@ -184,8 +208,8 @@ public class Util {
 	}
 
 	public static int compare(WyRecord o1, WyRecord o2) {
-		ArrayList<String> mKeys = new ArrayList<String>(o1.keySet());
-		ArrayList<String> tKeys = new ArrayList<String>(o2.keySet());
+		ArrayList<String> mKeys = new ArrayList<>(o1.keySet());
+		ArrayList<String> tKeys = new ArrayList<>(o2.keySet());
 		Collections.sort(mKeys);
 		Collections.sort(tKeys);
 
@@ -219,44 +243,14 @@ public class Util {
 			System.out.print((char) c.intValue());
 		}
 	}
-	
+
 	public static void println(WyArray argument) {
 		print(argument);
 		System.out.println();
 	}
 
-	public static WyRecord systemConsole(String[] args) {
-		WyRecord sysout = new WyRecord();
-
-		sysout.put("print_s", new WyLambda() {
-			public Object call(Object[] arguments) {
-				print((WyArray) arguments[0]);						
-				return null;
-			}
-		});
-		sysout.put("println_s", new WyLambda() {
-			public Object call(Object[] arguments) {
-				println((WyArray) arguments[0]);								
-				return null;
-			}
-		});
-		sysout.put("print", new WyLambda() {
-			public Object call(Object[] arguments) {
-				System.out.print(arguments[0]);					
-				return null;
-			}
-		});
-		sysout.put("println", new WyLambda() {
-			public Object call(Object[] arguments) {
-				System.out.println(arguments[0]);								
-				return null;
-			}
-		});
-		
-		WyRecord console = new WyRecord();
-		console.put("out", sysout);
-		console.put("args",fromStringList(args));
-		return console;
+	public static WyArray sysargs(String[] args) {
+		return fromStringList(args);
 	}
 
 }
