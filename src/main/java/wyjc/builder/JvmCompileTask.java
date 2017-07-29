@@ -144,7 +144,6 @@ public class JvmCompileTask implements Build.Task {
 	@Override
 	public Set<Path.Entry<?>> build(Collection<Pair<Path.Entry<?>, Path.Root>> delta, Build.Graph graph)
 			throws IOException {
-
 		Runtime runtime = Runtime.getRuntime();
 		long start = System.currentTimeMillis();
 		long memory = runtime.freeMemory();
