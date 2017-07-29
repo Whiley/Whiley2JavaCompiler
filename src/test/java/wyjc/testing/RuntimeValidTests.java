@@ -33,12 +33,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.junit.*;
@@ -47,7 +43,6 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import wyc.commands.Compile;
-import wyc.testing.AllValidTest;
 import wyc.util.TestUtils;
 import wycc.util.Logger;
 import wycc.util.Pair;
@@ -76,7 +71,29 @@ public class RuntimeValidTests {
 		// Bring over all the currently failing tests for the compiler. There's
 		// absolutely no point trying to see whether these work or not, since we
 		// already know they will not.
-		IGNORED.putAll(AllValidTest.IGNORED);
+		IGNORED.put("RecursiveType_Valid_12", "#339");
+		IGNORED.put("RecursiveType_Valid_22", "#339");
+		//
+		IGNORED.put("Function_Valid_15", "#566");
+		IGNORED.put("TypeEquals_Valid_23", "#566");
+		IGNORED.put("TypeEquals_Valid_41", "#566");
+		//
+		IGNORED.put("Lifetime_Lambda_Valid_4", "#645");
+		//
+		IGNORED.put("RecordSubtype_Valid_1", "#696");
+		IGNORED.put("RecordSubtype_Valid_2", "#696");
+		IGNORED.put("RecursiveType_Valid_3", "#696");
+		IGNORED.put("TypeEquals_Valid_36", "#696");
+		IGNORED.put("TypeEquals_Valid_37", "#696");
+		IGNORED.put("TypeEquals_Valid_38", "#696");
+		//
+		IGNORED.put("Function_Valid_11", "#702");
+		//
+		IGNORED.put("Complex_Valid_3", "#339");
+		IGNORED.put("DoWhile_Valid_4", "#339");
+		IGNORED.put("RecursiveType_Valid_28", "#339");
+		// =============================================
+		// Now for those additional tests failing because of WyJC
 		//
 		IGNORED.put("Complex_Valid_2", "???");
 		IGNORED.put("Complex_Valid_4", "???");
