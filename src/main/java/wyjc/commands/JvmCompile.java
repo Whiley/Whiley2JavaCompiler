@@ -6,20 +6,31 @@
 
 package wyjc.commands;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.List;
 
 import wybs.util.StdBuildRule;
 import wybs.util.StdProject;
-import wyc.builder.CompileTask;
 import wyc.commands.Compile;
+import wyc.commands.Compile.Result;
 import wyc.lang.WhileyFile;
 import wycc.util.Logger;
 import wyfs.lang.Content;
+import wyfs.lang.Path;
+import wyfs.util.DirectoryRoot;
 import wyil.lang.WyilFile;
 import wyjc.builder.JvmCompileTask;
 
 public class JvmCompile extends Compile {
+
+	/**
+	 * The location in which class binary files are stored, or null if not
+	 * specified.
+	 */
+	protected DirectoryRoot classdir;
+
 	/**
 	 * Construct a new instance of this command.
 	 *
@@ -44,6 +55,28 @@ public class JvmCompile extends Compile {
 		super(registry, logger, sysout, syserr);
 	}
 
+	public void setClassdir(File dir) throws IOException {
+		this.classdir = new DirectoryRoot(dir,registry);
+	}
+
+	@Override
+	protected void finaliseConfiguration() throws IOException {
+		super.finaliseConfiguration();
+		this.classdir = getDirectoryRoot(classdir,wyildir);
+	}
+
+	@Override
+	protected Result compile(StdProject project, List<Path.Entry<WhileyFile>> entries) {
+		try {
+			Result r = super.compile(project, entries);
+			classdir.flush();
+			return r;
+		} catch (IOException e) {
+			// now what?
+			throw new RuntimeException(e);
+		}
+	}
+
 	/**
 	 * Add build rules necessary for compiling whiley source files into binary
 	 * wyil files.
@@ -66,6 +99,6 @@ public class JvmCompile extends Compile {
 			jvmBuilder.setLogger(logger);
 		}
 		// FIXME: should be able to set class directory
-		project.add(new StdBuildRule(jvmBuilder, wyildir, wyilIncludes, wyilExcludes, wyildir));
+		project.add(new StdBuildRule(jvmBuilder, wyildir, wyilIncludes, wyilExcludes, classdir));
 	}
 }
