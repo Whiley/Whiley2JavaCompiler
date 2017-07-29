@@ -14,18 +14,28 @@ type Transition is ({
 // A Finite State Machine representation of a Trie
 type Trie is {
     Transition[] transitions
-}
+} where validTransitions(transitions)
+
+property validTransitions(Transition[] transitions)
+where all { k in 0..|transitions| | transitions[k].to <= |transitions| }
 
 // Define the Empty Trie
 constant DummyTransition is { from: 0, to: 0, character: 0 }
 constant EmptyTrie is { transitions: [DummyTransition; 0] }
 
-function append(Transition[] transitions, Transition t) -> Transition[]:
+function append(Transition[] transitions, Transition t) -> (Transition[] result)
+requires t.to <= (|transitions| + 1)
+requires validTransitions(transitions)
+ensures validTransitions(result)
+ensures |result| == |transitions| + 1:
     Transition[] r = [t; |transitions| + 1]
     int i = 0
-    while i < |transitions| where i >= 0 && |r| > |transitions|:
+    while i < |transitions|
+    where i >= 0 && |r| == (|transitions|+1)
+    where validTransitions(r):
         r[i] = transitions[i]
         i = i + 1
+    //
     return r
 
 // Add a complete string into a Trie starting from the root node.
@@ -35,7 +45,7 @@ function add(Trie trie, string str) -> Trie:
 // Add a string into a Trie from a given state, producing an
 // updated Trie.
 function add(Trie trie, int state, string str, int index) -> Trie
-requires state >= 0
+requires state >= 0 && state <= |trie.transitions|
 requires index >= 0 && index <= |str|:
     //
     if |str| == index:
