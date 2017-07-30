@@ -6,18 +6,31 @@
 
 package wyjc.commands;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.List;
 
 import wybs.util.StdBuildRule;
 import wybs.util.StdProject;
 import wyc.commands.Compile;
+import wycc.lang.Feature.ConfigurationError;
 import wycc.util.Logger;
 import wyfs.lang.Content;
+import wyfs.lang.Path;
+import wyfs.util.DirectoryRoot;
 import wyil.lang.WyilFile;
+import wyjc.Activator;
 import wyjc.builder.JavaCompileTask;
+import wyjc.core.JavaFile;
 
 public class JavaCompile extends Compile {
+	/**
+	 * The location in which generated java files are stored, or null if not
+	 * specified.
+	 */
+	protected DirectoryRoot javadir;
+
 	/**
 	 * Construct a new instance of this command.
 	 *
@@ -52,6 +65,31 @@ public class JavaCompile extends Compile {
 		return "Compile Whiley source files to Java source files";
 	}
 
+	@Override
+	public void set(String option, Object value) throws ConfigurationError {
+		try {
+			switch(option) {
+			case "javadir":
+				setJavadir(new File((String)value));
+				break;
+			default:
+				super.set(option, value);
+			}
+		} catch(IOException e) {
+			throw new ConfigurationError(e);
+		}
+	}
+
+	public void setJavadir(File dir) throws IOException {
+		this.javadir = new DirectoryRoot(dir,registry);
+	}
+
+	@Override
+	protected void finaliseConfiguration() throws IOException {
+		super.finaliseConfiguration();
+		this.javadir = getDirectoryRoot(javadir,wyildir);
+	}
+
 	/**
 	 * Add build rules necessary for compiling whiley source files into binary
 	 * wyil files.
@@ -74,6 +112,12 @@ public class JavaCompile extends Compile {
 			javaBuilder.setLogger(logger);
 		}
 		// FIXME: should be able to set class directory
-		project.add(new StdBuildRule(javaBuilder, wyildir, wyilIncludes, wyilExcludes, wyildir));
+		project.add(new StdBuildRule(javaBuilder, wyildir, wyilIncludes, wyilExcludes, javadir));
+	}
+
+
+	@Override
+	public List<? extends Path.Entry<?>> getModifiedSourceFiles() throws IOException {
+		return getModifiedSourceFiles(wyildir, wyilIncludes, javadir, JavaFile.ContentType);
 	}
 }

@@ -9,18 +9,22 @@ package wyjc.commands;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.List;
 
+import jasm.lang.ClassFile;
 import wybs.util.StdBuildRule;
 import wybs.util.StdProject;
 import wyc.commands.Compile;
 import wyc.commands.Compile.Result;
 import wyc.lang.WhileyFile;
+import wycc.lang.Feature.ConfigurationError;
 import wycc.util.Logger;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
 import wyfs.util.DirectoryRoot;
 import wyil.lang.WyilFile;
+import wyjc.Activator;
 import wyjc.builder.JvmCompileTask;
 
 public class JvmCompile extends Compile {
@@ -66,6 +70,21 @@ public class JvmCompile extends Compile {
 		return "Compile Whiley source files to JVM class files";
 	}
 
+	@Override
+	public void set(String option, Object value) throws ConfigurationError {
+		try {
+			switch(option) {
+			case "classdir":
+				setClassdir(new File((String)value));
+				break;
+			default:
+				super.set(option, value);
+			}
+		} catch(IOException e) {
+			throw new ConfigurationError(e);
+		}
+	}
+
 	public void setClassdir(File dir) throws IOException {
 		this.classdir = new DirectoryRoot(dir,registry);
 	}
@@ -77,7 +96,7 @@ public class JvmCompile extends Compile {
 	}
 
 	@Override
-	protected Result compile(StdProject project, List<Path.Entry<WhileyFile>> entries) {
+	protected Result compile(StdProject project, List<? extends Path.Entry<?>> entries) {
 		try {
 			Result r = super.compile(project, entries);
 			classdir.flush();
@@ -111,5 +130,10 @@ public class JvmCompile extends Compile {
 		}
 		// FIXME: should be able to set class directory
 		project.add(new StdBuildRule(jvmBuilder, wyildir, wyilIncludes, wyilExcludes, classdir));
+	}
+
+	@Override
+	public List<? extends Path.Entry<?>> getModifiedSourceFiles() throws IOException {
+		return getModifiedSourceFiles(wyildir, wyilIncludes, classdir, Activator.ContentType);
 	}
 }
