@@ -6,31 +6,18 @@
 
 package wyjc.commands;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.List;
 
 import wybs.util.StdBuildRule;
 import wybs.util.StdProject;
 import wyc.commands.Compile;
-import wyc.commands.Compile.Result;
-import wyc.lang.WhileyFile;
 import wycc.util.Logger;
 import wyfs.lang.Content;
-import wyfs.lang.Path;
-import wyfs.util.DirectoryRoot;
 import wyil.lang.WyilFile;
-import wyjc.builder.JvmCompileTask;
+import wyjc.builder.JavaCompileTask;
 
-public class JvmCompile extends Compile {
-
-	/**
-	 * The location in which class binary files are stored, or null if not
-	 * specified.
-	 */
-	protected DirectoryRoot classdir;
-
+public class JavaCompile extends Compile {
 	/**
 	 * Construct a new instance of this command.
 	 *
@@ -39,7 +26,7 @@ public class JvmCompile extends Compile {
 	 *            types.
 	 * @throws IOException
 	 */
-	public JvmCompile(Content.Registry registry, Logger logger) {
+	public JavaCompile(Content.Registry registry, Logger logger) {
 		super(registry, logger);
 	}
 
@@ -51,41 +38,18 @@ public class JvmCompile extends Compile {
 	 *            types.
 	 * @throws IOException
 	 */
-	public JvmCompile(Content.Registry registry, Logger logger, OutputStream sysout, OutputStream syserr) {
+	public JavaCompile(Content.Registry registry, Logger logger, OutputStream sysout, OutputStream syserr) {
 		super(registry, logger, sysout, syserr);
 	}
 
-
 	@Override
 	public String getName() {
-		return "jvmcompile";
+		return "javacompile";
 	}
 
 	@Override
 	public String getDescription() {
-		return "Compile Whiley source files to JVM class files";
-	}
-
-	public void setClassdir(File dir) throws IOException {
-		this.classdir = new DirectoryRoot(dir,registry);
-	}
-
-	@Override
-	protected void finaliseConfiguration() throws IOException {
-		super.finaliseConfiguration();
-		this.classdir = getDirectoryRoot(classdir,wyildir);
-	}
-
-	@Override
-	protected Result compile(StdProject project, List<Path.Entry<WhileyFile>> entries) {
-		try {
-			Result r = super.compile(project, entries);
-			classdir.flush();
-			return r;
-		} catch (IOException e) {
-			// now what?
-			throw new RuntimeException(e);
-		}
+		return "Compile Whiley source files to Java source files";
 	}
 
 	/**
@@ -97,19 +61,19 @@ public class JvmCompile extends Compile {
 	@Override
 	protected void addCompilationBuildRules(StdProject project) {
 		super.addCompilationBuildRules(project);
-		addWyil2JvmBytecodeBuildRule(project);
+		addWyil2JavaBytecodeBuildRule(project);
 	}
 
-	protected void addWyil2JvmBytecodeBuildRule(StdProject project) {
+	protected void addWyil2JavaBytecodeBuildRule(StdProject project) {
 		// Configure build rules for normal compilation
 		Content.Filter<WyilFile> wyilIncludes = Content.filter("**", WyilFile.ContentType);
 		Content.Filter<WyilFile> wyilExcludes = null;
 		// Rule for compiling Whiley to WyIL
-		JvmCompileTask jvmBuilder = new JvmCompileTask(project);
+		JavaCompileTask javaBuilder = new JavaCompileTask(project);
 		if(verbose) {
-			jvmBuilder.setLogger(logger);
+			javaBuilder.setLogger(logger);
 		}
 		// FIXME: should be able to set class directory
-		project.add(new StdBuildRule(jvmBuilder, wyildir, wyilIncludes, wyilExcludes, classdir));
+		project.add(new StdBuildRule(javaBuilder, wyildir, wyilIncludes, wyilExcludes, wyildir));
 	}
 }
