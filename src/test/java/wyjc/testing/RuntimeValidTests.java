@@ -177,7 +177,7 @@ public class RuntimeValidTests {
 		ByteArrayOutputStream sysout = new ByteArrayOutputStream();
 		Content.Registry registry = new wyc.Activator.Registry();
 		JvmCompile cmd = new JvmCompile(registry,Logger.NULL,sysout,syserr);
-		cmd.setWhileydir(new File(whileydir));
+		cmd.setWhileydir(whileydir);
 		cmd.setVerbose();
 		Compile.Result result = cmd.execute(args);
 		byte[] errBytes = syserr.toByteArray();
