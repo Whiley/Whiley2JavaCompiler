@@ -1,6 +1,7 @@
 .classpath
 .project
 *.class
+*.java
 *.wyil
 *.wyasm
 *.wycs
