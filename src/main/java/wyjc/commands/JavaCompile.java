@@ -15,6 +15,7 @@ import wybs.util.StdBuildRule;
 import wybs.util.StdProject;
 import wyc.commands.Compile;
 import wycc.lang.Feature.ConfigurationError;
+import wycc.util.ArrayUtils;
 import wycc.util.Logger;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
@@ -65,6 +66,15 @@ public class JavaCompile extends Compile {
 		return "Compile Whiley source files to Java source files";
 	}
 
+	private static final String[] SCHEMA = {
+			"javadir"
+	};
+
+	@Override
+	public String[] getOptions() {
+		return ArrayUtils.append(super.getOptions(),SCHEMA);
+	}
+
 	@Override
 	public void set(String option, Object value) throws ConfigurationError {
 		try {
@@ -77,6 +87,16 @@ public class JavaCompile extends Compile {
 			}
 		} catch(IOException e) {
 			throw new ConfigurationError(e);
+		}
+	}
+
+	@Override
+	public String describe(String option) {
+		switch(option) {
+		case "javadir":
+			return "Specify where to place generated java files";
+		default:
+			return super.describe(option);
 		}
 	}
 

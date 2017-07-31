@@ -19,6 +19,7 @@ import wyc.commands.Compile;
 import wyc.commands.Compile.Result;
 import wyc.lang.WhileyFile;
 import wycc.lang.Feature.ConfigurationError;
+import wycc.util.ArrayUtils;
 import wycc.util.Logger;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
@@ -70,6 +71,15 @@ public class JvmCompile extends Compile {
 		return "Compile Whiley source files to JVM class files";
 	}
 
+	private static final String[] SCHEMA = {
+			"classdir"
+	};
+
+	@Override
+	public String[] getOptions() {
+		return ArrayUtils.append(super.getOptions(),SCHEMA);
+	}
+
 	@Override
 	public void set(String option, Object value) throws ConfigurationError {
 		try {
@@ -82,6 +92,16 @@ public class JvmCompile extends Compile {
 			}
 		} catch(IOException e) {
 			throw new ConfigurationError(e);
+		}
+	}
+
+	@Override
+	public String describe(String option) {
+		switch(option) {
+		case "classdir":
+			return "Specify where to place generated class files";
+		default:
+			return super.describe(option);
 		}
 	}
 
