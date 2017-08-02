@@ -12,6 +12,7 @@ import wyfs.lang.Content;
 import wyfs.lang.Path;
 import wyjc.commands.JavaCompile;
 import wyjc.commands.JvmCompile;
+import wyjc.commands.JvmRun;
 
 public class Activator implements Module.Activator {
 	// =========================================================================
@@ -98,7 +99,8 @@ public class Activator implements Module.Activator {
 		// List of commands to use
 		final Command[] commands = {
 				new JvmCompile(registry, logger),
-				new JavaCompile(registry, logger)};
+				new JavaCompile(registry, logger),
+				new JvmRun(registry, logger)};
 		// Register all commands
 		for (Command c : commands) {
 			context.register(wycc.lang.Command.class, c);

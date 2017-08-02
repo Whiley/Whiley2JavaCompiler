@@ -1,7 +1,7 @@
 .classpath
 .project
 *.class
-*.java
+tests/**/*.java
 *.wyil
 *.wyasm
 *.wycs
