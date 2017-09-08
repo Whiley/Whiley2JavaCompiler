@@ -4,19 +4,13 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Arrays;
 
-import wybs.lang.NameID;
 import wybs.util.StdProject;
 import wyc.util.AbstractProjectCommand;
-import wycc.lang.Feature.ConfigurationError;
 import wycc.util.ArrayUtils;
 import wycc.util.Logger;
 import wyfs.lang.Content;
-import wyfs.lang.Path;
 import wyfs.util.DirectoryRoot;
-import wyfs.util.Trie;
-import wyil.lang.Type;
 
 public class JvmRun extends AbstractProjectCommand<JvmRun.Result> {
 	/**

@@ -159,7 +159,7 @@ public class JavaFile extends AbstractCompilationUnit {
 	 */
 	public static class Method extends AbstractDeclaration implements Declaration {
 		private Type returnType;
-		private List<Pair<Type,String>> parameters = new ArrayList<>();
+		private List<wycc.util.Pair<Type,String>> parameters = new ArrayList<>();
 		private Block body;
 
 		public Method(String name, Type returnType) {
@@ -171,7 +171,7 @@ public class JavaFile extends AbstractCompilationUnit {
 			return returnType;
 		}
 
-		public List<Pair<Type,String>> getParameters() {
+		public List<wycc.util.Pair<Type,String>> getParameters() {
 			return parameters;
 		}
 
@@ -185,14 +185,14 @@ public class JavaFile extends AbstractCompilationUnit {
 	}
 
 	public static class Constructor extends AbstractDeclaration implements Declaration {
-		private List<Pair<Type,String>> parameters = new ArrayList<>();
+		private List<wycc.util.Pair<Type,String>> parameters = new ArrayList<>();
 		private Block body;
 
 		public Constructor(String name) {
 			super(name);
 		}
 
-		public List<Pair<Type,String>> getParameters() {
+		public List<wycc.util.Pair<Type,String>> getParameters() {
 			return parameters;
 		}
 

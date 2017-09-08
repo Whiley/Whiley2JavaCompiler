@@ -25,13 +25,9 @@
 
 package wyjc.runtime;
 
-import java.lang.reflect.Method;
 import java.math.*;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Map;
-
-import static wyil.lang.Type.*;
 
 public class Util {
 	public static java.lang.String toRealString(Object o) {

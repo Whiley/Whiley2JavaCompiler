@@ -13,14 +13,14 @@ import java.util.List;
 
 import wybs.util.StdBuildRule;
 import wybs.util.StdProject;
-import wyc.commands.Compile;
+import wyc.command.Compile;
+import wyc.lang.WhileyFile;
 import wycc.lang.Feature.ConfigurationError;
 import wycc.util.ArrayUtils;
 import wycc.util.Logger;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
 import wyfs.util.DirectoryRoot;
-import wyil.lang.WyilFile;
 import wyjc.Activator;
 import wyjc.builder.JavaCompileTask;
 import wyjc.core.JavaFile;
@@ -124,8 +124,8 @@ public class JavaCompile extends Compile {
 
 	protected void addWyil2JavaBytecodeBuildRule(StdProject project) {
 		// Configure build rules for normal compilation
-		Content.Filter<WyilFile> wyilIncludes = Content.filter("**", WyilFile.ContentType);
-		Content.Filter<WyilFile> wyilExcludes = null;
+		Content.Filter<WhileyFile> wyilIncludes = Content.filter("**", WhileyFile.BinaryContentType);
+		Content.Filter<WhileyFile> wyilExcludes = null;
 		// Rule for compiling Whiley to WyIL
 		JavaCompileTask javaBuilder = new JavaCompileTask(project);
 		if(verbose) {

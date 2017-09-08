@@ -9,24 +9,17 @@ package wyjc.commands;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.List;
 
-import jasm.lang.ClassFile;
-import wybs.util.StdBuildRule;
 import wybs.util.StdProject;
-import wyc.commands.Compile;
-import wyc.commands.Compile.Result;
+import wyc.command.Compile;
 import wyc.lang.WhileyFile;
-import wycc.lang.Feature.ConfigurationError;
 import wycc.util.ArrayUtils;
 import wycc.util.Logger;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
 import wyfs.util.DirectoryRoot;
-import wyil.lang.WyilFile;
 import wyjc.Activator;
-import wyjc.builder.JvmCompileTask;
 
 public class JvmCompile extends Compile {
 
@@ -141,15 +134,15 @@ public class JvmCompile extends Compile {
 
 	protected void addWyil2JvmBytecodeBuildRule(StdProject project) {
 		// Configure build rules for normal compilation
-		Content.Filter<WyilFile> wyilIncludes = Content.filter("**", WyilFile.ContentType);
-		Content.Filter<WyilFile> wyilExcludes = null;
+		Content.Filter<WhileyFile> wyilIncludes = Content.filter("**", WhileyFile.BinaryContentType);
+		Content.Filter<WhileyFile> wyilExcludes = null;
 		// Rule for compiling Whiley to WyIL
-		JvmCompileTask jvmBuilder = new JvmCompileTask(project);
-		if(verbose) {
-			jvmBuilder.setLogger(logger);
-		}
-		// FIXME: should be able to set class directory
-		project.add(new StdBuildRule(jvmBuilder, wyildir, wyilIncludes, wyilExcludes, classdir));
+//		JvmCompileTask jvmBuilder = new JvmCompileTask(project);
+//		if(verbose) {
+//			jvmBuilder.setLogger(logger);
+//		}
+//		// FIXME: should be able to set class directory
+//		project.add(new StdBuildRule(jvmBuilder, wyildir, wyilIncludes, wyilExcludes, classdir));
 	}
 
 	@Override

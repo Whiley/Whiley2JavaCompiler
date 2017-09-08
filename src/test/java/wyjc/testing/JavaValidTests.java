@@ -41,7 +41,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import wyc.commands.Compile;
+import wyc.command.Compile;
 import wyc.util.TestUtils;
 import wycc.util.Logger;
 import wycc.util.Pair;
@@ -165,7 +165,7 @@ public class JavaValidTests {
 			// then
 			// we wouldn't need to append the following onto CLASSPATH.
 			CLASSPATH = WHILEY_SRC_DIR + File.pathSeparator + CLASSPATH;
-			String output = exec(CLASSPATH, ".", "wyjc.testing.RuntimeValidTests", name);
+			String output = exec(CLASSPATH, ".", "wyjc.testing.JavaValidTests", name);
 			if (!output.equals("")) {
 				System.out.println(output);
 				fail("unexpected output!");
