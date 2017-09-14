@@ -172,7 +172,7 @@ public class JavaCompileTask implements Build.Task {
 		//
 		Tuple<Decl.Variable> parameters = decl.getParameters();
 		for (int i = 0; i != parameters.size(); ++i) {
-			Decl.Variable pd = parameters.getOperand(i);
+			Decl.Variable pd = parameters.get(i);
 			JavaFile.Type pt = translateType(pd.getType());
 			method.getParameters().add(new Pair<>(pt, pd.getName().toString()));
 		}
@@ -187,7 +187,7 @@ public class JavaCompileTask implements Build.Task {
 	private JavaFile.Block translateBlock(Stmt.Block block) {
 		JavaFile.Block jblock = new JavaFile.Block();
 		for (int i=0;i!=block.size();++i) {
-			JavaFile.Term jterm = translateStatement(block.getOperand(i));
+			JavaFile.Term jterm = translateStatement(block.get(i));
 			jblock.getTerms().add(jterm);
 		}
 		return jblock;
@@ -315,7 +315,7 @@ public class JavaCompileTask implements Build.Task {
 		ArrayList<JavaFile.Case> jCases = new ArrayList<>();
 		//
 		for (int i = 0; i != cases.size(); ++i) {
-			Stmt.Case c = cases.getOperand(i);
+			Stmt.Case c = cases.get(i);
 			for (Expr v : c.getConditions()) {
 				// FIXME: problem here when values are not constants
 				JavaFile.Constant label = (JavaFile.Constant) translateExpression(v);
@@ -336,7 +336,7 @@ public class JavaCompileTask implements Build.Task {
 	private JavaFile.Term[] translateExpressions(Tuple<Expr> expr) {
 		JavaFile.Term[] terms = new JavaFile.Term[expr.size()];
 		for (int i = 0; i != terms.length; ++i) {
-			terms[i] = translateExpression(expr.getOperand(i));
+			terms[i] = translateExpression(expr.get(i));
 		}
 		return terms;
 	}
@@ -345,6 +345,16 @@ public class JavaCompileTask implements Build.Task {
 	private JavaFile.Term translateExpression(Expr expr) {
 		try {
 		switch (expr.getOpcode()) {
+		case EXPR_lnot:
+		case EXPR_ineg:
+		case EXPR_pread:
+		case EXPR_pinit:
+		case EXPR_bnot:
+		case EXPR_is:
+		return translateUnaryOperator((Expr.UnaryOperator) expr);
+		case EXPR_bshl:
+		case EXPR_bshr:
+			return translateBinaryOperator((Expr.BinaryOperator) expr);
 		case EXPR_iadd:
 		case EXPR_isub:
 		case EXPR_imul:
@@ -361,15 +371,7 @@ public class JavaCompileTask implements Build.Task {
 		case EXPR_bor:
 		case EXPR_bxor:
 		case EXPR_band:
-		case EXPR_bshl:
-		case EXPR_bshr:
-		case EXPR_is:
-		case EXPR_pread:
-		case EXPR_lnot:
-		case EXPR_ineg:
-		case EXPR_pinit:
-		case EXPR_bnot:
-			return translateOperator((Expr.Operator) expr);
+			return translateNaryOperator((Expr.NaryOperator) expr);
 		case EXPR_alen:
 			return translateArrayLength((Expr.ArrayLength) expr);
 		case EXPR_aread:
@@ -406,15 +408,26 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
-	private JavaFile.Term translateOperator(Expr.Operator expr) throws ResolutionError {
-		int kind = expr.getOpcode();
+	private JavaFile.Term translateUnaryOperator(Expr.UnaryOperator expr) throws ResolutionError {
+		return translateOperator(expr.getOpcode(),expr.getOperand());
+	}
+
+	private JavaFile.Term translateBinaryOperator(Expr.BinaryOperator expr) throws ResolutionError {
+		return translateOperator(expr.getOpcode(),expr.getFirstOperand(),expr.getSecondOperand());
+	}
+
+	private JavaFile.Term translateNaryOperator(Expr.NaryOperator expr) throws ResolutionError {
+		return translateOperator(expr.getOpcode(),expr.getOperands().toArray(Expr.class));
+	}
+
+	private JavaFile.Term translateOperator(int kind, Expr... operands) throws ResolutionError {
 		// First, translate all children of the operator.
 		List<JavaFile.Term> children = new ArrayList<>();
-		for (int i = 0; i != expr.size(); ++i) {
-			children.add(translateExpression(expr.getOperand(i)));
+		for (int i = 0; i != operands.length; ++i) {
+			children.add(translateExpression(operands[i]));
 		}
 		//
-		Type argumentType = typeSystem.inferType(expr.getOperand(0));
+		Type argumentType = typeSystem.inferType(operands[0]);
 		if (isDynamicallySized(argumentType)) {
 			// In this case, we have dynamically-sized arguments (e.g.
 			// BigInteger). In such case, we must exploit the various methods on
@@ -423,7 +436,7 @@ public class JavaCompileTask implements Build.Task {
 			// FIXME: this coercion should be deprecated with proper support for
 			// fixed-size types in the Whiley Compiler.
 			for (int i = 0; i != children.size(); ++i) {
-				children.set(i, toBigInteger(children.get(i), typeSystem.inferType(expr.getOperand(i))));
+				children.set(i, toBigInteger(children.get(i), typeSystem.inferType(operands[i])));
 			}
 			//
 			switch (kind) {
@@ -454,7 +467,7 @@ public class JavaCompileTask implements Build.Task {
 			case EXPR_bshr: {
 				// FIXME: in principle, this should be unnecesssary as the
 				// WhileyCompiler should take care of this.
-				children.set(1,toInt(children.get(1),typeSystem.inferType(expr)));
+				children.set(1,toInt(children.get(1),typeSystem.inferType(operands[1])));
 			}
 			case EXPR_bxor:
 			case EXPR_bor:
@@ -556,26 +569,27 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	private JavaFile.Term translateArrayAccess(Expr.ArrayAccess expr) throws ResolutionError {
-		JavaFile.Term src = translateExpression(expr.getSource());
-		JavaFile.Term index = translateExpression(expr.getSubscript());
+		JavaFile.Term src = translateExpression(expr.getFirstOperand());
+		JavaFile.Term index = translateExpression(expr.getSecondOperand());
 		return new JavaFile.ArrayAccess(src, toInt(index, Type.Int));
 	}
 
-	private JavaFile.Term translateArrayGenerator(Expr.Operator expr) {
+	private JavaFile.Term translateArrayGenerator(Expr.ArrayGenerator expr) {
 		throw new IllegalArgumentException("IMPLEMENT ME");
 	}
 
-	private JavaFile.Term translateArrayInitialiser(Expr.Operator expr) throws ResolutionError {
+	private JavaFile.Term translateArrayInitialiser(Expr.ArrayInitialiser expr) throws ResolutionError {
+		Tuple<Expr> operands = expr.getOperands();
 		List<JavaFile.Term> children = new ArrayList<>();
 		for (int i = 0; i != expr.size(); ++i) {
-			children.add(translateExpression(expr.getOperand(i)));
+			children.add(translateExpression(operands.get(i)));
 		}
 		JavaFile.Array type = (JavaFile.Array) translateType(typeSystem.inferType(expr));
 		return new JavaFile.NewArray(type, null, children);
 	}
 
-	private JavaFile.Term translateArrayLength(Expr.Operator expr) throws ResolutionError {
-		JavaFile.Term src = translateExpression(expr.getOperand(0));
+	private JavaFile.Term translateArrayLength(Expr.ArrayLength expr) throws ResolutionError {
+		JavaFile.Term src = translateExpression(expr.getOperand());
 		// FIXME: converting the array length to a big integer is a temporary
 		// fix. It works around the fact that the Whiley compiler types the
 		// return of an array length expression as just "int", when in fact it
@@ -617,7 +631,7 @@ public class JavaCompileTask implements Build.Task {
 				return translateFixedIntegerConstant(bi);
 			}
 		} else {
-			throw new IllegalArgumentException("GOT HERE");
+			return translateUtf8Constant(((Value.UTF8)c).get());
 		}
 		return new JavaFile.Constant(value);
 	}
@@ -687,8 +701,17 @@ public class JavaCompileTask implements Build.Task {
 		return new JavaFile.Invoke(null, new String[] { "BigInteger", "valueOf" }, new JavaFile.Constant(lv));
 	}
 
+	private JavaFile.Term translateUtf8Constant(byte[] bytes) {
+		ArrayList<JavaFile.Term> initialisers = new ArrayList<>();
+		for (int i = 0; i != bytes.length; ++i) {
+			BigInteger constant = BigInteger.valueOf(bytes[i]);
+			initialisers.add(translateUnboundIntegerConstant(constant));
+		}
+		return new JavaFile.NewArray(new JavaFile.Array(JAVA_MATH_BIGINTEGER), null, initialisers);
+	}
+
 	private JavaFile.Term translateFieldLoad(Expr.RecordAccess expr) {
-		JavaFile.Term source = translateExpression(expr.getSource());
+		JavaFile.Term source = translateExpression(expr.getOperand());
 		return new JavaFile.FieldAccess(source, expr.getField().toString());
 	}
 
@@ -708,11 +731,11 @@ public class JavaCompileTask implements Build.Task {
 
 	private JavaFile.Term translateInvoke(Expr.Invoke expr) {
 		List<String> path = new ArrayList<>();
-		Tuple<Expr> operands = expr.getArguments();
+		Tuple<Expr> operands = expr.getOperands();
 		List<JavaFile.Term> arguments = new ArrayList<>();
 		path.add(expr.getName().toNameID().name());
 		for (int i = 0; i != operands.size(); ++i) {
-			arguments.add(translateExpression(operands.getOperand(i)));
+			arguments.add(translateExpression(operands.get(i)));
 		}
 		return new JavaFile.Invoke(null, path, arguments);
 	}
@@ -766,10 +789,11 @@ public class JavaCompileTask implements Build.Task {
 			throw new IllegalArgumentException("Not sure what to do here");
 		}
 		// Construct the appropriate record now
+		Tuple<Expr> operands = expr.getOperands();
 		ArrayList<JavaFile.Term> parameters = new ArrayList<>();
-		for (int i = 0; i != expr.size(); ++i) {
-			WhileyFile.Pair<Identifier,Expr> field = expr.getOperand(i);
-			parameters.add(translateExpression(field.getSecond()));
+		for (int i = 0; i != operands.size(); ++i) {
+			Expr operand = operands.get(i);
+			parameters.add(translateExpression(operand));
 		}
 		return new JavaFile.New(jType, parameters);
 	}
@@ -835,7 +859,7 @@ public class JavaCompileTask implements Build.Task {
 		if (types.size() == 0) {
 			return JavaFile.VOID;
 		} else if (types.size() == 1) {
-			return translateType(types.getOperand(0));
+			return translateType(types.get(0));
 		} else {
 			throw new RuntimeException("Got here");
 		}
@@ -896,7 +920,7 @@ public class JavaCompileTask implements Build.Task {
 		ArrayList<JavaFile.Field> fields = new ArrayList<>();
 		Tuple<Decl.Variable> typeFields = type.getFields();
 		for (int i = 0; i != typeFields.size(); ++i) {
-			Decl.Variable f = typeFields.getOperand(i);
+			Decl.Variable f = typeFields.get(i);
 			JavaFile.Type fieldType = translateType(f.getType());
 			fields.add(new JavaFile.Field(fieldType, f.getName().toString()));
 		}
