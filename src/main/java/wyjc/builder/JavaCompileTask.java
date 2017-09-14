@@ -427,7 +427,7 @@ public class JavaCompileTask implements Build.Task {
 			children.add(translateExpression(operands[i]));
 		}
 		//
-		Type argumentType = typeSystem.inferType(operands[0]);
+		Type argumentType = operands[0].getType();
 		if (isDynamicallySized(argumentType)) {
 			// In this case, we have dynamically-sized arguments (e.g.
 			// BigInteger). In such case, we must exploit the various methods on
@@ -436,7 +436,7 @@ public class JavaCompileTask implements Build.Task {
 			// FIXME: this coercion should be deprecated with proper support for
 			// fixed-size types in the Whiley Compiler.
 			for (int i = 0; i != children.size(); ++i) {
-				children.set(i, toBigInteger(children.get(i), typeSystem.inferType(operands[i])));
+				children.set(i, toBigInteger(children.get(i), operands[i].getType()));
 			}
 			//
 			switch (kind) {
@@ -467,7 +467,7 @@ public class JavaCompileTask implements Build.Task {
 			case EXPR_bshr: {
 				// FIXME: in principle, this should be unnecesssary as the
 				// WhileyCompiler should take care of this.
-				children.set(1,toInt(children.get(1),typeSystem.inferType(operands[1])));
+				children.set(1,toInt(children.get(1),operands[1].getType()));
 			}
 			case EXPR_bxor:
 			case EXPR_bor:
@@ -584,7 +584,7 @@ public class JavaCompileTask implements Build.Task {
 		for (int i = 0; i != expr.size(); ++i) {
 			children.add(translateExpression(operands.get(i)));
 		}
-		JavaFile.Array type = (JavaFile.Array) translateType(typeSystem.inferType(expr));
+		JavaFile.Array type = (JavaFile.Array) translateType(expr.getType());
 		return new JavaFile.NewArray(type, null, children);
 	}
 
@@ -824,7 +824,7 @@ public class JavaCompileTask implements Build.Task {
 	private JavaFile.Term translateVariableAccess(Expr.VariableAccess expr) throws ResolutionError {
 		Decl.Variable vd = expr.getVariableDeclaration();
 		JavaFile.Term t = new JavaFile.VariableAccess(vd.getName().toString());
-		JavaFile.Type type = translateType(typeSystem.inferType(expr));
+		JavaFile.Type type = translateType(expr.getType());
 		if (expr.getOpcode() == EXPR_varcopy && !isCopyable(type)) {
 			// Since this type is not copyable, we need to clone it to ensure
 			// that ownership is properly preserved.
