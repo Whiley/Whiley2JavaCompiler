@@ -21,8 +21,10 @@ import wyfs.lang.Path;
 import wyfs.lang.Path.Entry;
 import wyfs.lang.Path.Root;
 import wyfs.util.Trie;
+import wyil.type.TypeSystem;
+
 import static wyc.lang.WhileyFile.*;
-import wyc.type.TypeSystem;
+
 import wyjc.core.JavaFile;
 import wyjc.util.JavaCodeGenerator;
 
@@ -229,8 +231,8 @@ public class JavaCompileTask implements Build.Task {
 				return translateReturn((Stmt.Return) c);
 			case STMT_switch:
 				return translateSwitch((Stmt.Switch) c);
-			case DECL_var:
-			case DECL_varinit:
+			case DECL_variable:
+			case DECL_variableinitialiser:
 				return translateVariableDeclaration((Decl.Variable) c);
 			default:
 				throw new IllegalArgumentException("unknown bytecode encountered");
@@ -345,46 +347,46 @@ public class JavaCompileTask implements Build.Task {
 	private JavaFile.Term translateExpression(Expr expr) {
 		try {
 		switch (expr.getOpcode()) {
-		case EXPR_lnot:
-		case EXPR_ineg:
-		case EXPR_pread:
-		case EXPR_pinit:
-		case EXPR_bnot:
+		case EXPR_logicalnot:
+		case EXPR_integernegation:
+		case EXPR_dereference:
+		case EXPR_new:
+		case EXPR_bitwisenot:
 		case EXPR_is:
 		return translateUnaryOperator((Expr.UnaryOperator) expr);
-		case EXPR_bshl:
-		case EXPR_bshr:
+		case EXPR_bitwiseshl:
+		case EXPR_bitwiseshr:
+		case EXPR_integeraddition:
+		case EXPR_integersubtraction:
+		case EXPR_integermultiplication:
+		case EXPR_integerdivision:
+		case EXPR_integerremainder:
+		case EXPR_equal:
+		case EXPR_notequal:
+		case EXPR_integerlessthan:
+		case EXPR_integerlessequal:
+		case EXPR_integergreaterthan:
+		case EXPR_integergreaterequal:
 			return translateBinaryOperator((Expr.BinaryOperator) expr);
-		case EXPR_iadd:
-		case EXPR_isub:
-		case EXPR_imul:
-		case EXPR_idiv:
-		case EXPR_irem:
-		case EXPR_eq:
-		case EXPR_neq:
-		case EXPR_ilt:
-		case EXPR_ile:
-		case EXPR_igt:
-		case EXPR_igteq:
-		case EXPR_land:
-		case EXPR_lor:
-		case EXPR_bor:
-		case EXPR_bxor:
-		case EXPR_band:
+		case EXPR_logicaland:
+		case EXPR_logicalor:
+		case EXPR_bitwiseor:
+		case EXPR_bitwisexor:
+		case EXPR_bitwiseand:
 			return translateNaryOperator((Expr.NaryOperator) expr);
-		case EXPR_alen:
+		case EXPR_arraylength:
 			return translateArrayLength((Expr.ArrayLength) expr);
-		case EXPR_aread:
+		case EXPR_arrayaccess:
 			return translateArrayAccess((Expr.ArrayAccess) expr);
-		case EXPR_ainit:
+		case EXPR_arrayinitialiser:
 			return translateArrayInitialiser((Expr.ArrayInitialiser) expr);
-		case EXPR_agen:
+		case EXPR_arraygenerator:
 			return translateArrayGenerator((Expr.ArrayGenerator) expr);
 		case EXPR_cast:
 			return translateConvert((Expr.Cast) expr);
 		case EXPR_constant:
 			return translateConst((Expr.Constant) expr);
-		case EXPR_rread:
+		case EXPR_recordaccess:
 			return translateFieldLoad((Expr.RecordAccess) expr);
 		case EXPR_indirectinvoke:
 			return translateIndirectInvoke((Expr.IndirectInvoke) expr);
@@ -392,13 +394,13 @@ public class JavaCompileTask implements Build.Task {
 			return translateInvoke((Expr.Invoke) expr);
 		case DECL_lambda:
 			return translateLambda((Decl.Lambda) expr);
-		case EXPR_rinit:
+		case EXPR_recordinitialiser:
 			return translateRecordInitialiser((Expr.RecordInitialiser) expr);
-		case EXPR_lall:
-		case EXPR_lsome:
+		case EXPR_logicaluniversal:
+		case EXPR_logicalexistential:
 			return translateQuantifier((Expr.Quantifier) expr);
-		case EXPR_varmove:
-		case EXPR_varcopy:
+		case EXPR_variablemove:
+		case EXPR_variablecopy:
 			return translateVariableAccess((Expr.VariableAccess) expr);
 		default:
 			throw new IllegalArgumentException("unknown expression encountered: " + expr);
@@ -440,19 +442,19 @@ public class JavaCompileTask implements Build.Task {
 			}
 			//
 			switch (kind) {
-			case EXPR_ineg:
-			case EXPR_iadd:
-			case EXPR_isub:
-			case EXPR_imul:
-			case EXPR_idiv:
-			case EXPR_irem:
+			case EXPR_integernegation:
+			case EXPR_integeraddition:
+			case EXPR_integersubtraction:
+			case EXPR_integermultiplication:
+			case EXPR_integerdivision:
+			case EXPR_integerremainder:
 				return translateUnboundArithmeticOperator(kind, children);
-			case EXPR_eq:
-			case EXPR_neq:
-			case EXPR_ilt:
-			case EXPR_ile:
-			case EXPR_igt:
-			case EXPR_igteq:
+			case EXPR_equal:
+			case EXPR_notequal:
+			case EXPR_integerlessthan:
+			case EXPR_integerlessequal:
+			case EXPR_integergreaterthan:
+			case EXPR_integergreaterequal:
 				return translateUnboundComparator(kind, children);
 			default:
 				throw new IllegalArgumentException("Unknown expression encountered");
@@ -463,15 +465,15 @@ public class JavaCompileTask implements Build.Task {
 			JavaFile.Operator.Kind k = translate2JavaOperator(kind);
 			// Apply any necessary coercions
 			switch(kind) {
-			case EXPR_bshl:
-			case EXPR_bshr: {
+			case EXPR_bitwiseshl:
+			case EXPR_bitwiseshr: {
 				// FIXME: in principle, this should be unnecesssary as the
 				// WhileyCompiler should take care of this.
 				children.set(1,toInt(children.get(1),operands[1].getType()));
 			}
-			case EXPR_bxor:
-			case EXPR_bor:
-			case EXPR_band: {
+			case EXPR_bitwisexor:
+			case EXPR_bitwiseor:
+			case EXPR_bitwiseand: {
 				JavaFile.Term result = new JavaFile.Operator(k, children);
 				return new JavaFile.Cast(JavaFile.BYTE, result);
 			}
@@ -504,22 +506,22 @@ public class JavaCompileTask implements Build.Task {
 	private static JavaFile.Term translateUnboundArithmeticOperator(int opcode, List<JavaFile.Term> operands) {
 		String methodName;
 		switch (opcode) {
-		case EXPR_ineg:
+		case EXPR_integernegation:
 			methodName = "negate";
 			break;
-		case EXPR_iadd:
+		case EXPR_integeraddition:
 			methodName = "add";
 			break;
-		case EXPR_isub:
+		case EXPR_integersubtraction:
 			methodName = "subtract";
 			break;
-		case EXPR_imul:
+		case EXPR_integermultiplication:
 			methodName = "multiply";
 			break;
-		case EXPR_idiv:
+		case EXPR_integerdivision:
 			methodName = "divide";
 			break;
-		case EXPR_irem:
+		case EXPR_integerremainder:
 			methodName = "remainder";
 			break;
 		default:
@@ -541,23 +543,23 @@ public class JavaCompileTask implements Build.Task {
 		JavaFile.Term operand = operands.get(1);
 		//
 		switch (opcode) {
-		case EXPR_neq: {
+		case EXPR_notequal: {
 			JavaFile.Term eq = new JavaFile.Invoke(receiver, new String[] { "equals" }, operand);
 			return new JavaFile.Operator(JavaFile.Operator.Kind.NOT, eq);
 		}
-		case EXPR_eq: {
+		case EXPR_equal: {
 			return new JavaFile.Invoke(receiver, new String[] { "equals" }, operand);
 		}
-		case EXPR_ilt:
+		case EXPR_integerlessthan:
 			kind = JavaFile.Operator.Kind.LT;
 			break;
-		case EXPR_ile:
+		case EXPR_integerlessequal:
 			kind = JavaFile.Operator.Kind.LTEQ;
 			break;
-		case EXPR_igt:
+		case EXPR_integergreaterthan:
 			kind = JavaFile.Operator.Kind.GT;
 			break;
-		case EXPR_igteq:
+		case EXPR_integergreaterequal:
 			kind = JavaFile.Operator.Kind.GTEQ;
 			break;
 		default:
@@ -825,7 +827,7 @@ public class JavaCompileTask implements Build.Task {
 		Decl.Variable vd = expr.getVariableDeclaration();
 		JavaFile.Term t = new JavaFile.VariableAccess(vd.getName().toString());
 		JavaFile.Type type = translateType(expr.getType());
-		if (expr.getOpcode() == EXPR_varcopy && !isCopyable(type)) {
+		if (expr.getOpcode() == EXPR_variablecopy && !isCopyable(type)) {
 			// Since this type is not copyable, we need to clone it to ensure
 			// that ownership is properly preserved.
 			t = new JavaFile.Invoke(t, "clone");
@@ -932,9 +934,9 @@ public class JavaCompileTask implements Build.Task {
 		if (type == TYPE_I8 || type == TYPE_I16 || type == TYPE_I32 || type == TYPE_I64 || type == TYPE_U8
 				|| type == TYPE_U16 || type == TYPE_U32 || type == TYPE_U64) {
 			return false;
-		} else if (typeSystem.isRawCoerciveSubtype(Type.Int, type)) {
+		} else if (typeSystem.isRawCoerciveSubtype(Type.Int, type, null)) {
 			return true;
-		} else if (typeSystem.extractReadableArray(type) != null) {
+		} else if (typeSystem.extractReadableArray(type, null) != null) {
 			return true;
 		} else {
 			// FIXME: need to recursively check component types for records.
@@ -1047,48 +1049,48 @@ public class JavaCompileTask implements Build.Task {
 
 	private static JavaFile.Operator.Kind translate2JavaOperator(int k) {
 		switch (k) {
-		case EXPR_ineg:
+		case EXPR_integernegation:
 			return JavaFile.Operator.Kind.NEG;
-		case EXPR_lnot:
+		case EXPR_logicalnot:
 			return JavaFile.Operator.Kind.NOT;
 		// Binary
-		case EXPR_iadd:
+		case EXPR_integeraddition:
 			return JavaFile.Operator.Kind.ADD;
-		case EXPR_isub:
+		case EXPR_integersubtraction:
 			return JavaFile.Operator.Kind.SUB;
-		case EXPR_imul:
+		case EXPR_integermultiplication:
 			return JavaFile.Operator.Kind.MUL;
-		case EXPR_idiv:
+		case EXPR_integerdivision:
 			return JavaFile.Operator.Kind.DIV;
-		case EXPR_irem:
+		case EXPR_integerremainder:
 			return JavaFile.Operator.Kind.REM;
-		case EXPR_eq:
+		case EXPR_equal:
 			return JavaFile.Operator.Kind.EQ;
-		case EXPR_neq:
+		case EXPR_notequal:
 			return JavaFile.Operator.Kind.NEQ;
-		case EXPR_ilt:
+		case EXPR_integerlessthan:
 			return JavaFile.Operator.Kind.LT;
-		case EXPR_ile:
+		case EXPR_integerlessequal:
 			return JavaFile.Operator.Kind.LTEQ;
-		case EXPR_igt:
+		case EXPR_integergreaterthan:
 			return JavaFile.Operator.Kind.GT;
-		case EXPR_igteq:
+		case EXPR_integergreaterequal:
 			return JavaFile.Operator.Kind.GTEQ;
-		case EXPR_land:
+		case EXPR_logicaland:
 			return JavaFile.Operator.Kind.AND;
-		case EXPR_lor:
+		case EXPR_logicalor:
 			return JavaFile.Operator.Kind.OR;
-		case EXPR_bor:
+		case EXPR_bitwiseor:
 			return JavaFile.Operator.Kind.BITWISEOR;
-		case EXPR_bxor:
+		case EXPR_bitwisexor:
 			return JavaFile.Operator.Kind.BITWISEXOR;
-		case EXPR_band:
+		case EXPR_bitwiseand:
 			return JavaFile.Operator.Kind.BITWISEAND;
-		case EXPR_bnot:
+		case EXPR_bitwisenot:
 			return JavaFile.Operator.Kind.BITWISEINVERT;
-		case EXPR_bshl:
+		case EXPR_bitwiseshl:
 			return JavaFile.Operator.Kind.LEFTSHIFT;
-		case EXPR_bshr:
+		case EXPR_bitwiseshr:
 			return JavaFile.Operator.Kind.RIGHTSHIFT;
 		default:
 			throw new IllegalArgumentException("unknown operator kind : " + k);
