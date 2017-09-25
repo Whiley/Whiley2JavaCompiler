@@ -1,13 +1,8 @@
 package wyjc.util;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-
-import wybs.util.ResolveError;
 import wycc.util.Pair;
-import wyil.lang.WyilFile;
 import wyjc.core.JavaFile;
 
 public class JavaCodeGenerator {

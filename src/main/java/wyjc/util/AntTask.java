@@ -8,23 +8,9 @@ package wyjc.util;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.apache.tools.ant.BuildException;
-import org.apache.tools.ant.taskdefs.MatchingTask;
-
-import wybs.util.StdProject;
 import wyc.Activator;
-import wyc.builder.CompileTask;
-import wyc.commands.Compile;
-import wyc.lang.WhileyFile;
-import wycc.util.ArrayUtils;
 import wycc.util.Logger;
 import wyfs.lang.Content;
-import wyfs.lang.Path;
-import wyfs.util.DirectoryRoot;
-import wyfs.util.VirtualRoot;
 import wyjc.commands.JvmCompile;
 
 /**

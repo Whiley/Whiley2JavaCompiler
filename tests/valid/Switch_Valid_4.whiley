@@ -1,10 +1,6 @@
-
-
-constant Red is 1
-
-constant Blue is 2
-
-constant Green is 3
+int Red = 1
+int Blue = 2
+int Green = 3
 
 type RGB is (int x) where x == Red || x == Blue || x == Green
 
@@ -12,7 +8,7 @@ function f(RGB c) -> int:
     switch c:
         case Red:
             return 123
-        case Switch_Valid_4.Blue:
+        case Switch_Valid_4::Blue:
             return 234
         default:
             return 456

@@ -6,17 +6,14 @@
 
 package wyjc.builder;
 
-import static wyil.lang.SyntaxTree.CONDITION;
-import static wyil.lang.SyntaxTree.LEFTHANDSIDE;
-import static wyil.lang.SyntaxTree.RIGHTHANDSIDE;
-
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.*;
 
 import wybs.lang.Build;
 import wybs.lang.NameID;
-import wybs.util.ResolveError;
+import wybs.lang.NameResolver.ResolutionError;
+import wyc.lang.WhileyFile;
 import wybs.lang.Build.Graph;
 import wycc.util.Logger;
 import wycc.util.Pair;
@@ -24,11 +21,10 @@ import wyfs.lang.Path;
 import wyfs.lang.Path.Entry;
 import wyfs.lang.Path.Root;
 import wyfs.util.Trie;
-import wyil.lang.*;
-import wyil.lang.Bytecode.Block;
-import wyil.lang.Bytecode.VariableDeclaration;
-import wyil.lang.SyntaxTree.Location;
-import wyil.util.TypeSystem;
+import wyil.type.TypeSystem;
+
+import static wyc.lang.WhileyFile.*;
+
 import wyjc.core.JavaFile;
 import wyjc.util.JavaCodeGenerator;
 
@@ -83,7 +79,7 @@ public class JavaCompileTask implements Build.Task {
 
 		for (Pair<Path.Entry<?>, Path.Root> p : delta) {
 			Path.Root dst = p.second();
-			Path.Entry<WyilFile> source = (Path.Entry<WyilFile>) p.first();
+			Path.Entry<WhileyFile> source = (Path.Entry<WhileyFile>) p.first();
 			Path.Entry<JavaFile> target = dst.create(source.id(), JavaFile.ContentType);
 			graph.registerDerivation(source, target);
 			generatedFiles.add(target);
@@ -106,9 +102,9 @@ public class JavaCompileTask implements Build.Task {
 		return generatedFiles;
 	}
 
-	private JavaFile build(Path.Entry<WyilFile> source, Path.Entry<JavaFile> target) throws IOException {
+	private JavaFile build(Path.Entry<WhileyFile> source, Path.Entry<JavaFile> target) throws IOException {
 		// Read the source file, which forces it to be parsed, etc.
-		WyilFile wf = source.read();
+		WhileyFile wf = source.read();
 		// Reset the list of unnamed types
 		unnamedTypes = new HashMap<>();
 		// Create an (empty) output file to contains the generated Java source
@@ -126,21 +122,17 @@ public class JavaCompileTask implements Build.Task {
 		jcd.getModifiers().add(JavaFile.Modifier.PUBLIC);
 		jcd.getModifiers().add(JavaFile.Modifier.FINAL);
 		// Translate all declarations
-		for (WyilFile.Block b : wf.blocks()) {
+		for (Decl b : wf.getDeclarations()) {
 			try {
-			if (b instanceof WyilFile.Declaration) {
-				WyilFile.Declaration wd = (WyilFile.Declaration) b;
-
-				// writeLocationsAsComments(d.getTree());
-
-				if (wd instanceof WyilFile.FunctionOrMethod) {
-					build((WyilFile.FunctionOrMethod) b, jcd);
-				} else if (b instanceof WyilFile.Type) {
-					build((WyilFile.Type) b, jcd);
+				if (b instanceof Decl.StaticVariable) {
+					// ?
+				} else if (b instanceof Decl.FunctionOrMethod) {
+					build((Decl.FunctionOrMethod) b, jcd);
+				} else if (b instanceof Decl.Type) {
+					build((Decl.Type) b, jcd);
 				}
-			}
-			} catch(ResolveError e) {
-				throw new IllegalArgumentException(e);
+			} catch (ResolutionError e) {
+				throw new RuntimeException(e);
 			}
 		}
 		// Add all generated unnamed types
@@ -152,39 +144,39 @@ public class JavaCompileTask implements Build.Task {
 		return jf;
 	}
 
-	private void build(WyilFile.Type decl, JavaFile.Class parent) throws ResolveError {
-		Type type = decl.type();
+	private void build(Decl.Type decl, JavaFile.Class parent) throws ResolutionError {
+		Type type = decl.getType();
 
 		// FIXME: deal with Nominal types ?
 
 		if (type instanceof Type.Record) {
 			//
 			List<JavaFile.Field> fields = translateFieldDeclarations((Type.Record) type);
-			JavaFile.Class struct = JavaCodeGenerator.generateStruct(decl.name(), fields);
-			struct.getModifiers().addAll(translateModifiers(decl.modifiers()));
+			JavaFile.Class struct = JavaCodeGenerator.generateStruct(decl.getName().toString(), fields);
+			struct.getModifiers().addAll(translateModifiers(decl.getModifiers()));
 			parent.getDeclarations().add(struct);
-		} else if(type instanceof Type.Union) {
+		} else if (type instanceof Type.Union) {
 			Type.Union ut = (Type.Union) type;
-			JavaFile.Type[] bounds = translateTypes(ut.bounds());
-			JavaFile.Class union = JavaCodeGenerator.generateUnion(decl.name(), bounds);
-			union.getModifiers().addAll(translateModifiers(decl.modifiers()));
+			JavaFile.Type[] bounds = translateTypes(ut.toArray(Type.class));
+			JavaFile.Class union = JavaCodeGenerator.generateUnion(decl.getName().toString(), bounds);
+			union.getModifiers().addAll(translateModifiers(decl.getModifiers()));
 			parent.getDeclarations().add(union);
 		}
 	}
 
-	private void build(WyilFile.FunctionOrMethod decl, JavaFile.Class parent) {
-		SyntaxTree tree = decl.getTree();
-		Type.FunctionOrMethod ft = decl.type();
-		JavaFile.Type returnType = translateReturnTypes(ft.returns());
+	private void build(Decl.FunctionOrMethod decl, JavaFile.Class parent) throws ResolutionError {
+		Type.Callable sig = decl.getType();
+		JavaFile.Type returnType = translateReturnTypes(sig.getReturns());
 		//
-		JavaFile.Method method = new JavaFile.Method(decl.name(), returnType);
-		method.getModifiers().addAll(translateModifiers(decl.modifiers()));
+		JavaFile.Method method = new JavaFile.Method(decl.getName().toString(), returnType);
+		method.getModifiers().addAll(translateModifiers(decl.getModifiers()));
 		method.getModifiers().add(JavaFile.Modifier.STATIC);
 		//
-		for (int i = 0; i != ft.params().length; ++i) {
-			Location<VariableDeclaration> pd = (Location<VariableDeclaration>) tree.getLocation(i);
-			JavaFile.Type pt = translateType(ft.parameter(i));
-			method.getParameters().add(new Pair<>(pt, pd.getBytecode().getName()));
+		Tuple<Decl.Variable> parameters = decl.getParameters();
+		for (int i = 0; i != parameters.size(); ++i) {
+			Decl.Variable pd = parameters.get(i);
+			JavaFile.Type pt = translateType(pd.getType());
+			method.getParameters().add(new Pair<>(pt, pd.getName().toString()));
 		}
 		//
 		// FIXME: should provide support for checking preconditions /
@@ -194,74 +186,71 @@ public class JavaCompileTask implements Build.Task {
 		parent.getDeclarations().add(method);
 	}
 
-	private JavaFile.Block translateBlock(Location<Bytecode.Block> block) {
+	private JavaFile.Block translateBlock(Stmt.Block block) {
 		JavaFile.Block jblock = new JavaFile.Block();
-		for (Location<?> term : block.getOperands()) {
-			JavaFile.Term jterm = translateStatement(term);
+		for (int i=0;i!=block.size();++i) {
+			JavaFile.Term jterm = translateStatement(block.get(i));
 			jblock.getTerms().add(jterm);
 		}
 		return jblock;
 	}
 
-	private JavaFile.Term translateStatement(Location<?> c) {
+	private JavaFile.Term translateStatement(Stmt c) {
 		try {
 			switch (c.getOpcode()) {
-			case Bytecode.OPCODE_aliasdecl:
-				// return
-				// translateAliasDeclaration((Location<Bytecode.AliasDeclaration>)
-				// c);
-			case Bytecode.OPCODE_assert:
-				return translateAssert((Location<Bytecode.Assert>) c);
-			case Bytecode.OPCODE_assume:
-				return translateAssume((Location<Bytecode.Assume>) c);
-			case Bytecode.OPCODE_assign:
-				return translateAssign((Location<Bytecode.Assign>) c);
-			case Bytecode.OPCODE_break:
-				return translateBreak((Location<Bytecode.Break>) c);
-			case Bytecode.OPCODE_continue:
-				return translateContinue((Location<Bytecode.Continue>) c);
-			//case Bytecode.OPCODE_debug:
-				// return translateDebug((Location<Bytecode.Debug>) c);
-			case Bytecode.OPCODE_dowhile:
-				 return translateDoWhile((Location<Bytecode.DoWhile>) c);
-			//case Bytecode.OPCODE_fail:
-				// return translateFail((Location<Bytecode.Fail>) c);
-			case Bytecode.OPCODE_if:
-			case Bytecode.OPCODE_ifelse:
-				return translateIf((Location<Bytecode.If>) c);
-			//case Bytecode.OPCODE_indirectinvoke:
-				// return
-				// translateIndirectInvoke((Location<Bytecode.IndirectInvoke>)
-				// c);
-			case Bytecode.OPCODE_invoke:
-				return translateInvoke((Location<Bytecode.Invoke>) c);
-//			case Bytecode.OPCODE_namedblock:
-//				 return translateBlock((Location<Bytecode.NamedBlock>) c);
-			case Bytecode.OPCODE_while:
-				return translateWhile((Location<Bytecode.While>) c);
-			case Bytecode.OPCODE_return:
-				return translateReturn((Location<Bytecode.Return>) c);
-			case Bytecode.OPCODE_switch:
-				return translateSwitch((Location<Bytecode.Switch>) c);
-			case Bytecode.OPCODE_vardecl:
-			case Bytecode.OPCODE_vardeclinit:
-				return translateVariableDeclaration((Location<Bytecode.VariableDeclaration>) c);
+			case STMT_assert:
+				return translateAssert((Stmt.Assert) c);
+			case STMT_assume:
+				return translateAssume((Stmt.Assume) c);
+			case STMT_assign:
+				return translateAssign((Stmt.Assign) c);
+			case STMT_break:
+				return translateBreak((Stmt.Break) c);
+			case STMT_continue:
+				return translateContinue((Stmt.Continue) c);
+			// case STMT_debug:
+			// return translateDebug((Stmt.Debug) c);
+			case STMT_dowhile:
+				return translateDoWhile((Stmt.DoWhile) c);
+			// case STMT_fail:
+			// return translateFail((Stmt.Fail) c);
+			case STMT_if:
+			case STMT_ifelse:
+				return translateIf((Stmt.IfElse) c);
+			// case STMT_indirectinvoke:
+			// return
+			// translateIndirectInvoke((Stmt.IndirectInvoke)
+			// c);
+			case EXPR_invoke:
+				return translateInvoke((Expr.Invoke) c);
+			// case STMT_namedblock:
+			// return translateBlock((Stmt.NamedBlock) c);
+			case STMT_while:
+				return translateWhile((Stmt.While) c);
+			case STMT_return:
+				return translateReturn((Stmt.Return) c);
+			case STMT_switch:
+				return translateSwitch((Stmt.Switch) c);
+			case DECL_variable:
+			case DECL_variableinitialiser:
+				return translateVariableDeclaration((Decl.Variable) c);
 			default:
 				throw new IllegalArgumentException("unknown bytecode encountered");
 			}
-		} catch (ResolveError e) {
-			throw new RuntimeException("resolve error", e);
+		} catch (ResolutionError e) {
+			// should be deadcode
+			throw new IllegalArgumentException(e);
 		}
 	}
 
-	private JavaFile.Term translateAssert(Location<Bytecode.Assert> stmt) {
-		JavaFile.Term operand = translateExpression(stmt.getOperand(0));
+	private JavaFile.Term translateAssert(Stmt.Assert stmt) {
+		JavaFile.Term operand = translateExpression(stmt.getCondition());
 		return new JavaFile.Assert(operand);
 	}
 
-	private JavaFile.Term translateAssign(Location<Bytecode.Assign> stmt) {
-		JavaFile.Term[] lhs = translateExpressions(stmt.getOperandGroup(LEFTHANDSIDE));
-		JavaFile.Term[] rhs = translateExpressions(stmt.getOperandGroup(RIGHTHANDSIDE));
+	private JavaFile.Term translateAssign(Stmt.Assign stmt) {
+		JavaFile.Term[] lhs = translateExpressions((Tuple) stmt.getLeftHandSide());
+		JavaFile.Term[] rhs = translateExpressions(stmt.getRightHandSide());
 		if(lhs.length > 1) {
 			throw new IllegalArgumentException("Need support for multiple assignments");
 		} else {
@@ -269,65 +258,70 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
-	private JavaFile.Term translateAssume(Location<Bytecode.Assume> stmt) {
-		JavaFile.Term operand = translateExpression(stmt.getOperand(0));
+	private JavaFile.Term translateAssume(Stmt.Assume stmt) {
+		JavaFile.Term operand = translateExpression(stmt.getCondition());
 		return new JavaFile.Assert(operand);
 	}
 
-	private JavaFile.Term translateBreak(Location<Bytecode.Break> stmt) {
+	private JavaFile.Term translateBreak(Stmt.Break stmt) {
 		return new JavaFile.Break();
 	}
 
-	private JavaFile.Term translateContinue(Location<Bytecode.Continue> stmt) {
+	private JavaFile.Term translateContinue(Stmt.Continue stmt) {
 		return new JavaFile.Continue();
 	}
 
-	private JavaFile.Term translateDoWhile(Location<Bytecode.DoWhile> stmt) {
-		JavaFile.Term condition = translateExpression(stmt.getOperand(0));
-		JavaFile.Block body = translateBlock(stmt.getBlock(0));
+	private JavaFile.Term translateDoWhile(Stmt.DoWhile stmt) {
+		JavaFile.Term condition = translateExpression(stmt.getCondition());
+		JavaFile.Block body = translateBlock(stmt.getBody());
 		return new JavaFile.DoWhile(body, condition);
 	}
 
-	private JavaFile.Term translateIf(Location<Bytecode.If> stmt) {
-		JavaFile.Term operand = translateExpression(stmt.getOperand(0));
-		JavaFile.Block trueBranch = translateBlock(stmt.getBlock(0));
+	private JavaFile.Term translateIf(Stmt.IfElse stmt) {
+		JavaFile.Term operand = translateExpression(stmt.getCondition());
+		JavaFile.Block trueBranch = translateBlock(stmt.getTrueBranch());
 		JavaFile.Block falseBranch = null;
-		if (stmt.numberOfBlocks() > 1) {
-			falseBranch = translateBlock(stmt.getBlock(1));
+		if (stmt.hasFalseBranch()) {
+			falseBranch = translateBlock(stmt.getFalseBranch());
 		}
 		return new JavaFile.If(operand, trueBranch, falseBranch);
 	}
 
-	private JavaFile.Term translateVariableDeclaration(Location<Bytecode.VariableDeclaration> stmt) {
-		Bytecode.VariableDeclaration d = stmt.getBytecode();
+	private JavaFile.Term translateVariableDeclaration(Decl.Variable stmt) throws ResolutionError {
 		JavaFile.Type type = translateType(stmt.getType());
 		JavaFile.Term initialiser = null;
-		if (stmt.numberOfOperands() > 0) {
-			initialiser = translateExpression(stmt.getOperand(0));
+		if (stmt.hasInitialiser()) {
+			initialiser = translateExpression(stmt.getInitialiser());
 		}
-		return new JavaFile.VariableDeclaration(type, d.getName(), initialiser);
+		// FIXME: potential for mismatch between Whiley identifiers and Java
+		// identifiers.
+		return new JavaFile.VariableDeclaration(type, stmt.getName().get(), initialiser);
 	}
 
-	private JavaFile.Term translateReturn(Location<Bytecode.Return> stmt) {
+	private JavaFile.Term translateReturn(Stmt.Return stmt) {
 		JavaFile.Term initialiser = null;
-		if (stmt.numberOfOperands() > 0) {
-			initialiser = translateExpression(stmt.getOperand(0));
+		Tuple<Expr> returns = stmt.getReturns();
+		if (returns.size() > 0) {
+			JavaFile.Term[] tmp = translateExpressions(returns);
+			if(tmp.length > 1) {
+				throw new RuntimeException("need to implement multiple returns");
+			}
+			initialiser = tmp[0];
 		}
 		return new JavaFile.Return(initialiser);
 	}
 
-	private JavaFile.Term translateSwitch(Location<Bytecode.Switch> stmt) throws ResolveError {
-		JavaFile.Term condition = translateExpression(stmt.getOperand(0));
-		Bytecode.Switch bytecode = stmt.getBytecode();
-		Bytecode.Case[] cases = bytecode.cases();
+	private JavaFile.Term translateSwitch(Stmt.Switch stmt) {
+		JavaFile.Term condition = translateExpression(stmt.getCondition());
+		Tuple<Stmt.Case> cases = stmt.getCases();
 		ArrayList<JavaFile.Case> jCases = new ArrayList<>();
 		//
-		for (int i = 0; i != cases.length; ++i) {
-			Bytecode.Case c = cases[i];
-			for (Constant v : c.values()) {
+		for (int i = 0; i != cases.size(); ++i) {
+			Stmt.Case c = cases.get(i);
+			for (Expr v : c.getConditions()) {
 				// FIXME: problem here when values are not constants
-				JavaFile.Constant label = (JavaFile.Constant) translateConstant(v);
-				JavaFile.Block body = translateBlock(stmt.getBlock(i));
+				JavaFile.Constant label = (JavaFile.Constant) translateExpression(v);
+				JavaFile.Block body = translateBlock(c.getBlock());
 				jCases.add(new JavaFile.Case(label, body));
 			}
 		}
@@ -335,104 +329,107 @@ public class JavaCompileTask implements Build.Task {
 		return new JavaFile.Switch(condition, jCases);
 	}
 
-	private JavaFile.Term translateWhile(Location<Bytecode.While> stmt) {
-		JavaFile.Term condition = translateExpression(stmt.getOperand(0));
-		JavaFile.Block body = translateBlock(stmt.getBlock(0));
+	private JavaFile.Term translateWhile(Stmt.While stmt) {
+		JavaFile.Term condition = translateExpression(stmt.getCondition());
+		JavaFile.Block body = translateBlock(stmt.getBody());
 		return new JavaFile.While(condition, body);
 	}
 
-	private void writeLocationsAsComments(SyntaxTree tree) {
-		List<Location<?>> locations = tree.getLocations();
-		for (int i = 0; i != locations.size(); ++i) {
-			Location<?> loc = locations.get(i);
-			String id = String.format("%1$" + 3 + "s", "#" + i);
-			String type = String.format("%1$-" + 8 + "s", Arrays.toString(loc.getTypes()));
-			System.out.println("// " + id + " " + type + " " + loc.getBytecode());
-		}
-	}
-
-	private JavaFile.Term[] translateExpressions(Location<?>[] expr) {
-		JavaFile.Term[] terms = new JavaFile.Term[expr.length];
-		for(int i=0;i!=terms.length;++i) {
-			terms[i] = translateExpression(expr[i]);
+	private JavaFile.Term[] translateExpressions(Tuple<Expr> expr) {
+		JavaFile.Term[] terms = new JavaFile.Term[expr.size()];
+		for (int i = 0; i != terms.length; ++i) {
+			terms[i] = translateExpression(expr.get(i));
 		}
 		return terms;
 	}
 
 	// @SuppressWarnings("unchecked")
-	private JavaFile.Term translateExpression(Location<?> expr) {
+	private JavaFile.Term translateExpression(Expr expr) {
 		try {
-			switch (expr.getOpcode()) {
-			case Bytecode.OPCODE_add:
-			case Bytecode.OPCODE_sub:
-			case Bytecode.OPCODE_mul:
-			case Bytecode.OPCODE_div:
-			case Bytecode.OPCODE_rem:
-			case Bytecode.OPCODE_eq:
-			case Bytecode.OPCODE_ne:
-			case Bytecode.OPCODE_lt:
-			case Bytecode.OPCODE_le:
-			case Bytecode.OPCODE_gt:
-			case Bytecode.OPCODE_ge:
-			case Bytecode.OPCODE_logicaland:
-			case Bytecode.OPCODE_logicalor:
-			case Bytecode.OPCODE_bitwiseor:
-			case Bytecode.OPCODE_bitwisexor:
-			case Bytecode.OPCODE_bitwiseand:
-			case Bytecode.OPCODE_shl:
-			case Bytecode.OPCODE_shr:
-			case Bytecode.OPCODE_is:
-			case Bytecode.OPCODE_dereference:
-			case Bytecode.OPCODE_logicalnot:
-			case Bytecode.OPCODE_neg:
-			case Bytecode.OPCODE_newobject:
-			case Bytecode.OPCODE_bitwiseinvert:
-				return translateOperator((Location<Bytecode.Operator>) expr);
-			case Bytecode.OPCODE_arraylength:
-				return translateArrayLength((Location<Bytecode.Operator>) expr);
-			case Bytecode.OPCODE_arrayindex:
-				return translateArrayAccess((Location<Bytecode.Operator>) expr);
-			case Bytecode.OPCODE_array:
-				return translateArrayInitialiser((Location<Bytecode.Operator>) expr);
-			case Bytecode.OPCODE_arraygen:
-				return translateArrayGenerator((Location<Bytecode.Operator>) expr);
-			case Bytecode.OPCODE_convert:
-				return translateConvert((Location<Bytecode.Convert>) expr);
-			case Bytecode.OPCODE_const:
-				return translateConst((Location<Bytecode.Const>) expr);
-			case Bytecode.OPCODE_fieldload:
-				return translateFieldLoad((Location<Bytecode.FieldLoad>) expr);
-			case Bytecode.OPCODE_indirectinvoke:
-				return translateIndirectInvoke((Location<Bytecode.IndirectInvoke>) expr);
-			case Bytecode.OPCODE_invoke:
-				return translateInvoke((Location<Bytecode.Invoke>) expr);
-			case Bytecode.OPCODE_lambda:
-				return translateLambda((Location<Bytecode.Lambda>) expr);
-			case Bytecode.OPCODE_record:
-				return translateRecordInitialiser((Location<Bytecode.Operator>) expr);
-			case Bytecode.OPCODE_all:
-			case Bytecode.OPCODE_some:
-				return translateQuantifier((Location<Bytecode.Quantifier>) expr);
-			case Bytecode.OPCODE_varmove:
-			case Bytecode.OPCODE_varcopy:
-				return translateVariableAccess((Location<Bytecode.VariableAccess>) expr);
-			default:
-				throw new IllegalArgumentException("unknown bytecode encountered: " + expr.getBytecode());
-			}
-		} catch (ResolveError e) {
-			throw new RuntimeException("resolve error", e);
+		switch (expr.getOpcode()) {
+		case EXPR_logicalnot:
+		case EXPR_integernegation:
+		case EXPR_dereference:
+		case EXPR_new:
+		case EXPR_bitwisenot:
+		case EXPR_is:
+		return translateUnaryOperator((Expr.UnaryOperator) expr);
+		case EXPR_bitwiseshl:
+		case EXPR_bitwiseshr:
+		case EXPR_integeraddition:
+		case EXPR_integersubtraction:
+		case EXPR_integermultiplication:
+		case EXPR_integerdivision:
+		case EXPR_integerremainder:
+		case EXPR_equal:
+		case EXPR_notequal:
+		case EXPR_integerlessthan:
+		case EXPR_integerlessequal:
+		case EXPR_integergreaterthan:
+		case EXPR_integergreaterequal:
+			return translateBinaryOperator((Expr.BinaryOperator) expr);
+		case EXPR_logicaland:
+		case EXPR_logicalor:
+		case EXPR_bitwiseor:
+		case EXPR_bitwisexor:
+		case EXPR_bitwiseand:
+			return translateNaryOperator((Expr.NaryOperator) expr);
+		case EXPR_arraylength:
+			return translateArrayLength((Expr.ArrayLength) expr);
+		case EXPR_arrayaccess:
+			return translateArrayAccess((Expr.ArrayAccess) expr);
+		case EXPR_arrayinitialiser:
+			return translateArrayInitialiser((Expr.ArrayInitialiser) expr);
+		case EXPR_arraygenerator:
+			return translateArrayGenerator((Expr.ArrayGenerator) expr);
+		case EXPR_cast:
+			return translateConvert((Expr.Cast) expr);
+		case EXPR_constant:
+			return translateConst((Expr.Constant) expr);
+		case EXPR_recordaccess:
+			return translateFieldLoad((Expr.RecordAccess) expr);
+		case EXPR_indirectinvoke:
+			return translateIndirectInvoke((Expr.IndirectInvoke) expr);
+		case EXPR_invoke:
+			return translateInvoke((Expr.Invoke) expr);
+		case DECL_lambda:
+			return translateLambda((Decl.Lambda) expr);
+		case EXPR_recordinitialiser:
+			return translateRecordInitialiser((Expr.RecordInitialiser) expr);
+		case EXPR_logicaluniversal:
+		case EXPR_logicalexistential:
+			return translateQuantifier((Expr.Quantifier) expr);
+		case EXPR_variablemove:
+		case EXPR_variablecopy:
+			return translateVariableAccess((Expr.VariableAccess) expr);
+		default:
+			throw new IllegalArgumentException("unknown expression encountered: " + expr);
+		}
+		} catch(ResolutionError e) {
+			throw new RuntimeException("internal failure: " + e.getMessage(), e);
 		}
 	}
 
-	private JavaFile.Term translateOperator(Location<Bytecode.Operator> expr) throws ResolveError {
-		Bytecode.OperatorKind kind = expr.getBytecode().kind();
+	private JavaFile.Term translateUnaryOperator(Expr.UnaryOperator expr) throws ResolutionError {
+		return translateOperator(expr.getOpcode(),expr.getOperand());
+	}
+
+	private JavaFile.Term translateBinaryOperator(Expr.BinaryOperator expr) throws ResolutionError {
+		return translateOperator(expr.getOpcode(),expr.getFirstOperand(),expr.getSecondOperand());
+	}
+
+	private JavaFile.Term translateNaryOperator(Expr.NaryOperator expr) throws ResolutionError {
+		return translateOperator(expr.getOpcode(),expr.getOperands().toArray(Expr.class));
+	}
+
+	private JavaFile.Term translateOperator(int kind, Expr... operands) throws ResolutionError {
 		// First, translate all children of the operator.
 		List<JavaFile.Term> children = new ArrayList<>();
-		for (int i = 0; i != expr.numberOfOperands(); ++i) {
-			children.add(translateExpression(expr.getOperand(i)));
+		for (int i = 0; i != operands.length; ++i) {
+			children.add(translateExpression(operands[i]));
 		}
 		//
-		Type argumentType = expr.getOperand(0).getType();
+		Type argumentType = operands[0].getType();
 		if (isDynamicallySized(argumentType)) {
 			// In this case, we have dynamically-sized arguments (e.g.
 			// BigInteger). In such case, we must exploit the various methods on
@@ -441,23 +438,23 @@ public class JavaCompileTask implements Build.Task {
 			// FIXME: this coercion should be deprecated with proper support for
 			// fixed-size types in the Whiley Compiler.
 			for (int i = 0; i != children.size(); ++i) {
-				children.set(i, toBigInteger(children.get(i), expr.getOperand(i).getType()));
+				children.set(i, toBigInteger(children.get(i), operands[i].getType()));
 			}
 			//
 			switch (kind) {
-			case NEG:
-			case ADD:
-			case SUB:
-			case MUL:
-			case DIV:
-			case REM:
+			case EXPR_integernegation:
+			case EXPR_integeraddition:
+			case EXPR_integersubtraction:
+			case EXPR_integermultiplication:
+			case EXPR_integerdivision:
+			case EXPR_integerremainder:
 				return translateUnboundArithmeticOperator(kind, children);
-			case EQ:
-			case NEQ:
-			case LT:
-			case LTEQ:
-			case GT:
-			case GTEQ:
+			case EXPR_equal:
+			case EXPR_notequal:
+			case EXPR_integerlessthan:
+			case EXPR_integerlessequal:
+			case EXPR_integergreaterthan:
+			case EXPR_integergreaterequal:
 				return translateUnboundComparator(kind, children);
 			default:
 				throw new IllegalArgumentException("Unknown expression encountered");
@@ -468,15 +465,15 @@ public class JavaCompileTask implements Build.Task {
 			JavaFile.Operator.Kind k = translate2JavaOperator(kind);
 			// Apply any necessary coercions
 			switch(kind) {
-			case LEFTSHIFT:
-			case RIGHTSHIFT: {
+			case EXPR_bitwiseshl:
+			case EXPR_bitwiseshr: {
 				// FIXME: in principle, this should be unnecesssary as the
 				// WhileyCompiler should take care of this.
-				children.set(1,toInt(children.get(1),expr.getOperand(1).getType()));
+				children.set(1,toInt(children.get(1),operands[1].getType()));
 			}
-			case BITWISEXOR:
-			case BITWISEOR:
-			case BITWISEAND: {
+			case EXPR_bitwisexor:
+			case EXPR_bitwiseor:
+			case EXPR_bitwiseand: {
 				JavaFile.Term result = new JavaFile.Operator(k, children);
 				return new JavaFile.Cast(JavaFile.BYTE, result);
 			}
@@ -502,34 +499,33 @@ public class JavaCompileTask implements Build.Task {
 	 * BigInteger y = x.add(BigInteger.valueOf(1));
 	 * </pre>
 	 *
-	 * @param k
+	 * @param opcode
 	 * @param operands
 	 * @return
 	 */
-	private static JavaFile.Term translateUnboundArithmeticOperator(Bytecode.OperatorKind k,
-			List<JavaFile.Term> operands) {
+	private static JavaFile.Term translateUnboundArithmeticOperator(int opcode, List<JavaFile.Term> operands) {
 		String methodName;
-		switch (k) {
-		case NEG:
+		switch (opcode) {
+		case EXPR_integernegation:
 			methodName = "negate";
 			break;
-		case ADD:
+		case EXPR_integeraddition:
 			methodName = "add";
 			break;
-		case SUB:
+		case EXPR_integersubtraction:
 			methodName = "subtract";
 			break;
-		case MUL:
+		case EXPR_integermultiplication:
 			methodName = "multiply";
 			break;
-		case DIV:
+		case EXPR_integerdivision:
 			methodName = "divide";
 			break;
-		case REM:
+		case EXPR_integerremainder:
 			methodName = "remainder";
 			break;
 		default:
-			throw new IllegalArgumentException("unknown operator kind : " + k);
+			throw new IllegalArgumentException("unknown operator kind : " + opcode);
 		}
 		// Construct the method invocation
 		JavaFile.Term receiver = operands.get(0);
@@ -541,61 +537,61 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
-	private static JavaFile.Term translateUnboundComparator(Bytecode.OperatorKind k, List<JavaFile.Term> operands) {
+	private static JavaFile.Term translateUnboundComparator(int opcode, List<JavaFile.Term> operands) {
 		JavaFile.Operator.Kind kind;
 		JavaFile.Term receiver = operands.get(0);
 		JavaFile.Term operand = operands.get(1);
 		//
-		switch (k) {
-		case NEQ: {
+		switch (opcode) {
+		case EXPR_notequal: {
 			JavaFile.Term eq = new JavaFile.Invoke(receiver, new String[] { "equals" }, operand);
 			return new JavaFile.Operator(JavaFile.Operator.Kind.NOT, eq);
 		}
-		case EQ: {
+		case EXPR_equal: {
 			return new JavaFile.Invoke(receiver, new String[] { "equals" }, operand);
 		}
-		case LT:
+		case EXPR_integerlessthan:
 			kind = JavaFile.Operator.Kind.LT;
 			break;
-		case LTEQ:
+		case EXPR_integerlessequal:
 			kind = JavaFile.Operator.Kind.LTEQ;
 			break;
-		case GT:
+		case EXPR_integergreaterthan:
 			kind = JavaFile.Operator.Kind.GT;
 			break;
-		case GTEQ:
+		case EXPR_integergreaterequal:
 			kind = JavaFile.Operator.Kind.GTEQ;
 			break;
 		default:
-			throw new IllegalArgumentException("unknown operator kind : " + k);
+			throw new IllegalArgumentException("unknown operator kind : " + opcode);
 		}
 		// Construct the method invocation
 		JavaFile.Term cmp = new JavaFile.Invoke(receiver, new String[] { "compareTo" }, operand);
 		return new JavaFile.Operator(kind, cmp, new JavaFile.Constant(0));
 	}
 
-	private JavaFile.Term translateArrayAccess(Location<Bytecode.Operator> expr) throws ResolveError {
-		Location<?> indexExpr = expr.getOperand(1);
-		JavaFile.Term src = translateExpression(expr.getOperand(0));
-		JavaFile.Term index = translateExpression(indexExpr);
-		return new JavaFile.ArrayAccess(src, toInt(index, indexExpr.getType()));
+	private JavaFile.Term translateArrayAccess(Expr.ArrayAccess expr) throws ResolutionError {
+		JavaFile.Term src = translateExpression(expr.getFirstOperand());
+		JavaFile.Term index = translateExpression(expr.getSecondOperand());
+		return new JavaFile.ArrayAccess(src, toInt(index, Type.Int));
 	}
 
-	private JavaFile.Term translateArrayGenerator(Location<Bytecode.Operator> expr) {
+	private JavaFile.Term translateArrayGenerator(Expr.ArrayGenerator expr) {
 		throw new IllegalArgumentException("IMPLEMENT ME");
 	}
 
-	private JavaFile.Term translateArrayInitialiser(Location<Bytecode.Operator> expr) {
+	private JavaFile.Term translateArrayInitialiser(Expr.ArrayInitialiser expr) throws ResolutionError {
+		Tuple<Expr> operands = expr.getOperands();
 		List<JavaFile.Term> children = new ArrayList<>();
-		for (int i = 0; i != expr.numberOfOperands(); ++i) {
-			children.add(translateExpression(expr.getOperand(i)));
+		for (int i = 0; i != expr.size(); ++i) {
+			children.add(translateExpression(operands.get(i)));
 		}
 		JavaFile.Array type = (JavaFile.Array) translateType(expr.getType());
 		return new JavaFile.NewArray(type, null, children);
 	}
 
-	private JavaFile.Term translateArrayLength(Location<Bytecode.Operator> expr) throws ResolveError {
-		JavaFile.Term src = translateExpression(expr.getOperand(0));
+	private JavaFile.Term translateArrayLength(Expr.ArrayLength expr) throws ResolutionError {
+		JavaFile.Term src = translateExpression(expr.getOperand());
 		// FIXME: converting the array length to a big integer is a temporary
 		// fix. It works around the fact that the Whiley compiler types the
 		// return of an array length expression as just "int", when in fact it
@@ -603,7 +599,7 @@ public class JavaCompileTask implements Build.Task {
 		return toBigInteger(new JavaFile.FieldAccess(src, "length"), TYPE_I32);
 	}
 
-	private JavaFile.Term translateConvert(Location<Bytecode.Convert> expr) {
+	private JavaFile.Term translateConvert(Expr.Cast expr) {
 		// out.print("(");
 		// writeType(expr.getType());
 		// out.print(") ");
@@ -611,39 +607,66 @@ public class JavaCompileTask implements Build.Task {
 		return null;
 	}
 
-	private JavaFile.Term translateConst(Location<Bytecode.Const> expr) throws ResolveError {
-		Constant c = expr.getBytecode().constant();
-		return translateConstant(c);
+	private JavaFile.Term translateConst(Expr.Constant expr) throws ResolutionError {
+		return translateConstant(expr.getValue());
 	}
 
-	private JavaFile.Term translateConstant(Constant c) throws ResolveError {
-		Type type = c.type();
+	private JavaFile.Term translateConstant(Value c) throws ResolutionError {
+		//Type type = c.type();
 		Object value;
-		if (c instanceof Constant.Null) {
+		if (c instanceof Value.Null) {
 			value = null;
-		} else if (c instanceof Constant.Bool) {
-			Constant.Bool bc = (Constant.Bool) c;
-			value = bc.value();
-		} else if (c instanceof Constant.Byte) {
-			Constant.Byte bc = (Constant.Byte) c;
-			value = bc.value();
-		} else if (c instanceof Constant.Integer) {
-			Constant.Integer bc = (Constant.Integer) c;
-			BigInteger bi = bc.value();
-			// This case is more complex because we have to manage large integer
-			// values (which do not fit as literals).
+		} else if (c instanceof Value.Bool) {
+			Value.Bool bc = (Value.Bool) c;
+			value = bc.get();
+		} else if (c instanceof Value.Byte) {
+			Value.Byte bc = (Value.Byte) c;
+			value = bc.get();
+		} else if (c instanceof Value.Int) {
+			Value.Int bc = (Value.Int) c;
+			BigInteger bi = bc.get();
+			Type type = inferIntegerType(bi);
+			//
 			if (isDynamicallySized(type)) {
 				return translateUnboundIntegerConstant(bi);
 			} else {
 				return translateFixedIntegerConstant(bi);
 			}
-		} else if (c instanceof Constant.Array) {
-			Constant.Array ac = (Constant.Array) c;
-			return translateArrayConstant((Constant.Array) c);
 		} else {
-			throw new IllegalArgumentException("GOT HERE");
+			return translateUtf8Constant(((Value.UTF8)c).get());
 		}
 		return new JavaFile.Constant(value);
+	}
+	private static long i8_MIN = -128;
+	private static long i8_MAX = 127;
+	private static long u8_MAX = 255;
+	private static long i16_MIN = -32768;
+	private static long i16_MAX = 32767;
+	private static long u16_MAX = 65535;
+	private static long i32_MIN = Integer.MIN_VALUE;
+	private static long i32_MAX = Integer.MAX_VALUE;;
+	private static long u32_MAX = 2147483648L;
+
+	private Type inferIntegerType(BigInteger i) {
+		try {
+			long v = i.longValueExact();
+			// FIXME: the exact best way to handle this is unclear to me.
+//			if (v >= 0 && v <= u8_MAX) {
+//				return TYPE_U8;
+//			} else if (v >= 0 && v <= u16_MAX) {
+//				return TYPE_U16;
+//			} else if (v >= 0 && v <= u32_MAX) {
+//				return TYPE_U32;
+//			} else if (v >= i8_MIN && v <= i8_MAX) {
+//				return TYPE_I8;
+//			} else if (v >= i16_MIN && v <= i16_MAX) {
+//				return TYPE_I16;
+//			} else if (v >= i32_MIN && v <= i32_MAX) {
+//				return TYPE_I32;
+//			}
+		} catch(ArithmeticException ex) {
+		}
+		return Type.Int;
 	}
 
 	/**
@@ -680,42 +703,21 @@ public class JavaCompileTask implements Build.Task {
 		return new JavaFile.Invoke(null, new String[] { "BigInteger", "valueOf" }, new JavaFile.Constant(lv));
 	}
 
-	/**
-	 * Translate an array constant. This simply creates an array of the
-	 * appropriate type and employs an initialiser expression to assign each
-	 * element. For example, the following Whiley code:
-	 *
-	 * <pre>
-	 * int[] xs = [1,2]
-	 * </pre>
-	 *
-	 * is translated into the following Java code
-	 *
-	 * <pre>
-	 * BigInteger[] xs = new BigInteger[] { BigInteger.valueOf(1), BigInteger.valueOf(1) };
-	 * </pre>
-	 *
-	 * @param array
-	 * @return
-	 * @throws ResolveError
-	 */
-	private JavaFile.Term translateArrayConstant(Constant.Array array) throws ResolveError {
-		List<Constant> elements = array.values();
-		List<JavaFile.Term> children = new ArrayList<>();
-		for (int i = 0; i != elements.size(); ++i) {
-			children.add(translateConstant(elements.get(i)));
+	private JavaFile.Term translateUtf8Constant(byte[] bytes) {
+		ArrayList<JavaFile.Term> initialisers = new ArrayList<>();
+		for (int i = 0; i != bytes.length; ++i) {
+			BigInteger constant = BigInteger.valueOf(bytes[i]);
+			initialisers.add(translateUnboundIntegerConstant(constant));
 		}
-		JavaFile.Array type = (JavaFile.Array) translateType(array.type());
-		return new JavaFile.NewArray(type, null, children);
+		return new JavaFile.NewArray(new JavaFile.Array(JAVA_MATH_BIGINTEGER), null, initialisers);
 	}
 
-	private JavaFile.Term translateFieldLoad(Location<Bytecode.FieldLoad> expr) {
-		Bytecode.FieldLoad fld = expr.getBytecode();
-		JavaFile.Term source = translateExpression(expr.getOperand(0));
-		return new JavaFile.FieldAccess(source, fld.fieldName());
+	private JavaFile.Term translateFieldLoad(Expr.RecordAccess expr) {
+		JavaFile.Term source = translateExpression(expr.getOperand());
+		return new JavaFile.FieldAccess(source, expr.getField().toString());
 	}
 
-	private JavaFile.Term translateIndirectInvoke(Location<Bytecode.IndirectInvoke> expr) {
+	private JavaFile.Term translateIndirectInvoke(Expr.IndirectInvoke expr) {
 		// Location<?>[] operands = expr.getOperands();
 		// writeExpression(operands[0]);
 		// out.print("(");
@@ -729,19 +731,19 @@ public class JavaCompileTask implements Build.Task {
 		return null;
 	}
 
-	private JavaFile.Term translateInvoke(Location<Bytecode.Invoke> expr) {
-		Location<?>[] operands = expr.getOperands();
+	private JavaFile.Term translateInvoke(Expr.Invoke expr) {
 		List<String> path = new ArrayList<>();
+		Tuple<Expr> operands = expr.getOperands();
 		List<JavaFile.Term> arguments = new ArrayList<>();
-		path.add(expr.getBytecode().name().name());
-		for (int i = 0; i != operands.length; ++i) {
-			arguments.add(translateExpression(operands[i]));
+		path.add(expr.getName().toNameID().name());
+		for (int i = 0; i != operands.size(); ++i) {
+			arguments.add(translateExpression(operands.get(i)));
 		}
 		return new JavaFile.Invoke(null, path, arguments);
 	}
 
 	@SuppressWarnings("unchecked")
-	private JavaFile.Term translateLambda(Location<Bytecode.Lambda> expr) {
+	private JavaFile.Term translateLambda(Decl.Lambda expr) {
 		// out.print("&[");
 		// Location<?>[] environment =
 		// expr.getOperandGroup(SyntaxTree.ENVIRONMENT);
@@ -774,13 +776,14 @@ public class JavaCompileTask implements Build.Task {
 		return null;
 	}
 
-	private JavaFile.Term translateRecordInitialiser(Location<Bytecode.Operator> expr) throws ResolveError {
-		Type type = expr.getType();
+	private JavaFile.Term translateRecordInitialiser(Expr.RecordInitialiser expr) throws ResolutionError {
+		Type type = null; // expr.getType(); // declared type (if applicable)
 		JavaFile.Reference jType;
 		//
 		if (type instanceof Type.Nominal) {
 			Type.Nominal nt = (Type.Nominal) type;
-			jType = new JavaFile.Reference(nt.name().name());
+			// FIXME: this is surely broken
+			jType = new JavaFile.Reference(nt.getName().toNameID().name());
 		} else if(type instanceof Type.Record) {
 			JavaFile.Class unnamedStruct = generateAnonymousStruct((Type.Record) type);
 			jType = new JavaFile.Reference(unnamedStruct.getName());
@@ -788,16 +791,17 @@ public class JavaCompileTask implements Build.Task {
 			throw new IllegalArgumentException("Not sure what to do here");
 		}
 		// Construct the appropriate record now
-		Location<?>[] operands = expr.getOperands();
+		Tuple<Expr> operands = expr.getOperands();
 		ArrayList<JavaFile.Term> parameters = new ArrayList<>();
-		for (int i = 0; i != operands.length; ++i) {
-			parameters.add(translateExpression(expr.getOperand(i)));
+		for (int i = 0; i != operands.size(); ++i) {
+			Expr operand = operands.get(i);
+			parameters.add(translateExpression(operand));
 		}
 		return new JavaFile.New(jType, parameters);
 	}
 
 	@SuppressWarnings("unchecked")
-	private JavaFile.Term translateQuantifier(Location<Bytecode.Quantifier> c) {
+	private JavaFile.Term translateQuantifier(Expr.Quantifier c) {
 		// out.print(quantifierKind(c));
 		// out.print(" { ");
 		// for (int i = 0; i != c.numberOfOperandGroups(); ++i) {
@@ -819,11 +823,11 @@ public class JavaCompileTask implements Build.Task {
 		return null;
 	}
 
-	private JavaFile.Term translateVariableAccess(Location<Bytecode.VariableAccess> expr) {
-		Location<VariableDeclaration> vd = getVariableDeclaration(expr.getOperand(0));
-		JavaFile.Term t = new JavaFile.VariableAccess(vd.getBytecode().getName());
+	private JavaFile.Term translateVariableAccess(Expr.VariableAccess expr) throws ResolutionError {
+		Decl.Variable vd = expr.getVariableDeclaration();
+		JavaFile.Term t = new JavaFile.VariableAccess(vd.getName().toString());
 		JavaFile.Type type = translateType(expr.getType());
-		if (expr.getOpcode() == Bytecode.OPCODE_varcopy && !isCopyable(type)) {
+		if (expr.getOpcode() == EXPR_variablecopy && !isCopyable(type)) {
 			// Since this type is not copyable, we need to clone it to ensure
 			// that ownership is properly preserved.
 			t = new JavaFile.Invoke(t, "clone");
@@ -831,12 +835,12 @@ public class JavaCompileTask implements Build.Task {
 		return t;
 	}
 
-	private static List<JavaFile.Modifier> translateModifiers(List<Modifier> modifiers) {
+	private static List<JavaFile.Modifier> translateModifiers(Tuple<Modifier> modifiers) {
 		ArrayList<JavaFile.Modifier> javaModifiers = new ArrayList<>();
 		for (Modifier m : modifiers) {
-			if (m == Modifier.PUBLIC) {
+			if (m instanceof Modifier.Public) {
 				javaModifiers.add(JavaFile.Modifier.PUBLIC);
-			} else if (m == Modifier.PRIVATE) {
+			} else if (m instanceof Modifier.Private) {
 				javaModifiers.add(JavaFile.Modifier.PRIVATE);
 			}
 		}
@@ -851,12 +855,13 @@ public class JavaCompileTask implements Build.Task {
 	 *
 	 * @param types
 	 * @return
+	 * @throws ResolutionError
 	 */
-	private JavaFile.Type translateReturnTypes(Type... types) {
-		if (types.length == 0) {
+	private JavaFile.Type translateReturnTypes(Tuple<Type> types) throws ResolutionError {
+		if (types.size() == 0) {
 			return JavaFile.VOID;
-		} else if (types.length == 1) {
-			return translateType(types[0]);
+		} else if (types.size() == 1) {
+			return translateType(types.get(0));
 		} else {
 			throw new RuntimeException("Got here");
 		}
@@ -870,30 +875,25 @@ public class JavaCompileTask implements Build.Task {
 	 * <code>int|bool</code> is reduced to just <code>Object</code> in Java.
 	 *
 	 * @param type
+	 * @throws ResolutionError
 	 */
-	private JavaFile.Type translateType(Type type) {
+	private JavaFile.Type translateType(Type type) throws ResolutionError {
 		JavaFile.Type jtype = typeMap.get(type);
 		if (jtype != null) {
 			return jtype;
 		} else if (type instanceof Type.Array) {
 			Type.Array arrT = (Type.Array) type;
-			return new JavaFile.Array(translateType(arrT.element()));
+			return new JavaFile.Array(translateType(arrT.getElement()));
 		} else if (type instanceof Type.Nominal) {
-			try {
-				Type.Nominal tn = (Type.Nominal) type;
-				NameID nid = tn.name();
-				WyilFile f = project.get(nid.module(), WyilFile.ContentType).read();
-				WyilFile.Type decl = f.type(nid.name());
-				if (decl.type() instanceof Type.Record) {
-					return new JavaFile.Reference(tn.name().name());
-				} else {
-					return translateType(decl.type());
-				}
-			} catch (IOException e) {
-				throw new IllegalArgumentException(e);
+			Type.Nominal tn = (Type.Nominal) type;
+			Decl.Type decl = typeSystem.resolveExactly(tn.getName(), Decl.Type.class);
+			if (decl.getType() instanceof Type.Record) {
+				return new JavaFile.Reference(tn.getName().toString());
+			} else {
+				return translateType(decl.getType());
 			}
 		} else if (type instanceof Type.Record) {
-			JavaFile.Class struct = generateAnonymousStruct((Type.Record)type);
+			JavaFile.Class struct = generateAnonymousStruct((Type.Record) type);
 			return new JavaFile.Reference(struct.getName());
 		} else {
 			// Default
@@ -901,14 +901,14 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
-	private JavaFile.Type[] translateTypes(Type... types) {
+	private JavaFile.Type[] translateTypes(Type... types) throws ResolutionError {
 		JavaFile.Type[] rs = new JavaFile.Type[types.length];
 		for(int i=0;i!=types.length;++i) {
 			rs[i] = translateType(types[i]);
 		}
 		return rs;
 	}
-	private JavaFile.Class generateAnonymousStruct(Type.Record type) {
+	private JavaFile.Class generateAnonymousStruct(Type.Record type) throws ResolutionError {
 		JavaFile.Class r = unnamedTypes.get(type);
 		if(r == null) {
 			List<JavaFile.Field> fields = translateFieldDeclarations(type);
@@ -918,25 +918,25 @@ public class JavaCompileTask implements Build.Task {
 		return r;
 	}
 
-	private List<JavaFile.Field> translateFieldDeclarations(Type.Record type) {
+	private List<JavaFile.Field> translateFieldDeclarations(Type.Record type) throws ResolutionError {
 		ArrayList<JavaFile.Field> fields = new ArrayList<>();
-		String[] fieldNames = type.getFieldNames();
-		for (int i = 0; i != fieldNames.length; ++i) {
-			String fieldName = fieldNames[i];
-			JavaFile.Type fieldType = translateType(type.getField(fieldName));
-			fields.add(new JavaFile.Field(fieldType, fieldName));
+		Tuple<Decl.Variable> typeFields = type.getFields();
+		for (int i = 0; i != typeFields.size(); ++i) {
+			Decl.Variable f = typeFields.get(i);
+			JavaFile.Type fieldType = translateType(f.getType());
+			fields.add(new JavaFile.Field(fieldType, f.getName().toString()));
 		}
 		return fields;
 	}
 
-	public boolean isDynamicallySized(Type type) throws ResolveError {
+	public boolean isDynamicallySized(Type type) throws ResolutionError {
 		// FIXME: this is basically completely broken.
 		if (type == TYPE_I8 || type == TYPE_I16 || type == TYPE_I32 || type == TYPE_I64 || type == TYPE_U8
 				|| type == TYPE_U16 || type == TYPE_U32 || type == TYPE_U64) {
 			return false;
-		} else if (typeSystem.isSubtype(Type.T_INT, type)) {
+		} else if (typeSystem.isRawCoerciveSubtype(Type.Int, type, null)) {
 			return true;
-		} else if (typeSystem.expandAsEffectiveArray(type) != null) {
+		} else if (typeSystem.extractReadableArray(type, null) != null) {
 			return true;
 		} else {
 			// FIXME: need to recursively check component types for records.
@@ -944,14 +944,22 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
-	private static Type TYPE_I8 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "i8"));
-	private static Type TYPE_I16 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "i16"));
-	private static Type TYPE_I32 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "i32"));
-	private static Type TYPE_I64 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "i64"));
-	private static Type TYPE_U8 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "u8"));
-	private static Type TYPE_U16 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "u16"));
-	private static Type TYPE_U32 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "u32"));
-	private static Type TYPE_U64 = Type.Nominal(new NameID(Trie.fromString("whiley/lang/Int"), "u64"));
+	private static Type TYPE(String... args) {
+		Identifier[] components = new Identifier[args.length];
+		for(int i=0;i!=args.length;++i) {
+			components[i] = new Identifier(args[i]);
+		}
+		return new Type.Nominal(new Name(components));
+	}
+	private static Type TYPE_I8 = TYPE("std","integer","i8");
+    private static Type TYPE_I16 = TYPE("std","integer","i17");
+    private static Type TYPE_I32 = TYPE("std","integer","i32");
+    private static Type TYPE_I64 = TYPE("std","integer","i64");
+    private static Type TYPE_U8 = TYPE("std","integer","u8");
+    private static Type TYPE_U16 = TYPE("std","integer","u16");
+    private static Type TYPE_U32 = TYPE("std","integer","u32");
+    private static Type TYPE_U64 = TYPE("std","integer","u64");
+
 
 	private static JavaFile.Reference JAVA_MATH_BIGINTEGER = new JavaFile.Reference("BigInteger");
 
@@ -965,11 +973,11 @@ public class JavaCompileTask implements Build.Task {
 			put(TYPE_U8, JavaFile.BYTE);
 			put(TYPE_U16, JavaFile.INT);
 			put(TYPE_U32, JavaFile.LONG);
-			//
-			put(Type.T_BOOL, JavaFile.BOOLEAN);
-			put(Type.T_BYTE, JavaFile.BYTE);
-			put(Type.T_INT, JAVA_MATH_BIGINTEGER);
-			put(Type.T_ANY, new JavaFile.Reference("Object"));
+			// Others
+			put(Type.Bool, JavaFile.BOOLEAN);
+			put(Type.Byte, JavaFile.BYTE);
+			put(Type.Int, JAVA_MATH_BIGINTEGER);
+			put(Type.Any, new JavaFile.Reference("Object"));
 		}
 	};
 
@@ -985,9 +993,10 @@ public class JavaCompileTask implements Build.Task {
 	 * @param type
 	 *            The Whiley type associated with the given term.
 	 * @return
+	 * @throws ResolutionError
 	 * @throws ResolveError
 	 */
-	private JavaFile.Term toInt(JavaFile.Term term, Type type) throws ResolveError {
+	private JavaFile.Term toInt(JavaFile.Term term, Type type) throws ResolutionError {
 		if (isDynamicallySized(type)) {
 			return new JavaFile.Invoke(term, new String[] { "intValue" });
 		} else {
@@ -1007,9 +1016,10 @@ public class JavaCompileTask implements Build.Task {
 	 * @param type
 	 *            The Whiley type associated with the given term.
 	 * @return
+	 * @throws ResolutionError
 	 * @throws ResolveError
 	 */
-	private JavaFile.Term toBigInteger(JavaFile.Term term, Type type) throws ResolveError {
+	private JavaFile.Term toBigInteger(JavaFile.Term term, Type type) throws ResolutionError {
 		if (isDynamicallySized(type)) {
 			return term;
 		} else {
@@ -1037,65 +1047,53 @@ public class JavaCompileTask implements Build.Task {
 		}
 	}
 
-	private static JavaFile.Operator.Kind translate2JavaOperator(Bytecode.OperatorKind k) {
+	private static JavaFile.Operator.Kind translate2JavaOperator(int k) {
 		switch (k) {
-		case NEG:
+		case EXPR_integernegation:
 			return JavaFile.Operator.Kind.NEG;
-		case NOT:
+		case EXPR_logicalnot:
 			return JavaFile.Operator.Kind.NOT;
 		// Binary
-		case ADD:
+		case EXPR_integeraddition:
 			return JavaFile.Operator.Kind.ADD;
-		case SUB:
+		case EXPR_integersubtraction:
 			return JavaFile.Operator.Kind.SUB;
-		case MUL:
+		case EXPR_integermultiplication:
 			return JavaFile.Operator.Kind.MUL;
-		case DIV:
+		case EXPR_integerdivision:
 			return JavaFile.Operator.Kind.DIV;
-		case REM:
+		case EXPR_integerremainder:
 			return JavaFile.Operator.Kind.REM;
-		case EQ:
+		case EXPR_equal:
 			return JavaFile.Operator.Kind.EQ;
-		case NEQ:
+		case EXPR_notequal:
 			return JavaFile.Operator.Kind.NEQ;
-		case LT:
+		case EXPR_integerlessthan:
 			return JavaFile.Operator.Kind.LT;
-		case LTEQ:
+		case EXPR_integerlessequal:
 			return JavaFile.Operator.Kind.LTEQ;
-		case GT:
+		case EXPR_integergreaterthan:
 			return JavaFile.Operator.Kind.GT;
-		case GTEQ:
+		case EXPR_integergreaterequal:
 			return JavaFile.Operator.Kind.GTEQ;
-		case AND:
+		case EXPR_logicaland:
 			return JavaFile.Operator.Kind.AND;
-		case OR:
+		case EXPR_logicalor:
 			return JavaFile.Operator.Kind.OR;
-		case BITWISEOR:
+		case EXPR_bitwiseor:
 			return JavaFile.Operator.Kind.BITWISEOR;
-		case BITWISEXOR:
+		case EXPR_bitwisexor:
 			return JavaFile.Operator.Kind.BITWISEXOR;
-		case BITWISEAND:
+		case EXPR_bitwiseand:
 			return JavaFile.Operator.Kind.BITWISEAND;
-		case BITWISEINVERT:
+		case EXPR_bitwisenot:
 			return JavaFile.Operator.Kind.BITWISEINVERT;
-		case LEFTSHIFT:
+		case EXPR_bitwiseshl:
 			return JavaFile.Operator.Kind.LEFTSHIFT;
-		case RIGHTSHIFT:
+		case EXPR_bitwiseshr:
 			return JavaFile.Operator.Kind.RIGHTSHIFT;
 		default:
 			throw new IllegalArgumentException("unknown operator kind : " + k);
 		}
-	}
-
-	@SuppressWarnings("unchecked")
-	private Location<VariableDeclaration> getVariableDeclaration(Location<?> loc) {
-		switch (loc.getOpcode()) {
-		case Bytecode.OPCODE_vardecl:
-		case Bytecode.OPCODE_vardeclinit:
-			return (Location<VariableDeclaration>) loc;
-		case Bytecode.OPCODE_aliasdecl:
-			return getVariableDeclaration(loc.getOperand(0));
-		}
-		throw new IllegalArgumentException("invalid location provided: " + loc);
 	}
 }
