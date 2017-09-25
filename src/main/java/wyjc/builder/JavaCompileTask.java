@@ -30,15 +30,15 @@ import wyjc.util.JavaCodeGenerator;
 
 public class JavaCompileTask implements Build.Task {
 	/**
-	 * The master project for identifying all resources available to the
-	 * builder. This includes all modules declared in the project being verified
-	 * and/or defined in external resources (e.g. jar files).
+	 * The master project for identifying all resources available to the builder.
+	 * This includes all modules declared in the project being verified and/or
+	 * defined in external resources (e.g. jar files).
 	 */
 	protected final Build.Project project;
 
 	/**
-	 * The type system is useful for managing nominal types and converting them
-	 * into their underlying types.
+	 * The type system is useful for managing nominal types and converting them into
+	 * their underlying types.
 	 */
 	protected final TypeSystem typeSystem;
 
@@ -114,8 +114,9 @@ public class JavaCompileTask implements Build.Task {
 		// Add package declaration?
 
 		// Add imports
-		jf.getDeclarations().add(new JavaFile.Import("java","math","BigInteger"));
-		jf.getDeclarations().add(new JavaFile.Import("java","util","Arrays"));
+		jf.getDeclarations().add(new JavaFile.Import("java", "math", "BigInteger"));
+		jf.getDeclarations().add(new JavaFile.Import("java", "util", "Arrays"));
+		jf.getDeclarations().add(new JavaFile.Import("java", "util", "function", "Function"));
 
 		String className = wf.getEntry().id().last();
 		JavaFile.Class jcd = new JavaFile.Class(className);
@@ -136,7 +137,7 @@ public class JavaCompileTask implements Build.Task {
 			}
 		}
 		// Add all generated unnamed types
-		for(Map.Entry<Type, JavaFile.Class> e : unnamedTypes.entrySet()) {
+		for (Map.Entry<Type, JavaFile.Class> e : unnamedTypes.entrySet()) {
 			jcd.getDeclarations().add(e.getValue());
 		}
 		//
@@ -172,12 +173,8 @@ public class JavaCompileTask implements Build.Task {
 		method.getModifiers().addAll(translateModifiers(decl.getModifiers()));
 		method.getModifiers().add(JavaFile.Modifier.STATIC);
 		//
-		Tuple<Decl.Variable> parameters = decl.getParameters();
-		for (int i = 0; i != parameters.size(); ++i) {
-			Decl.Variable pd = parameters.get(i);
-			JavaFile.Type pt = translateType(pd.getType());
-			method.getParameters().add(new Pair<>(pt, pd.getName().toString()));
-		}
+		List<JavaFile.VariableDeclaration> parameters = translateVariableDeclarations(decl.getParameters());
+		method.getParameters().addAll(parameters);
 		//
 		// FIXME: should provide support for checking preconditions /
 		// postconditions here. These can be implemented as runtime checks.
@@ -186,9 +183,31 @@ public class JavaCompileTask implements Build.Task {
 		parent.getDeclarations().add(method);
 	}
 
+	private List<JavaFile.VariableDeclaration> translateVariableDeclarations(Tuple<Decl.Variable> decls)
+			throws ResolutionError {
+		List<JavaFile.VariableDeclaration> result = new ArrayList<>();
+		for (int i = 0; i != decls.size(); ++i) {
+			Decl.Variable pd = decls.get(i);
+			JavaFile.Type pt = translateType(pd.getType());
+			result.add(new JavaFile.VariableDeclaration(pt, pd.getName().toString(), null));
+		}
+		return result;
+	}
+
+	private JavaFile.Term translateVariableDeclaration(Decl.Variable stmt) throws ResolutionError {
+		JavaFile.Type type = translateType(stmt.getType());
+		JavaFile.Term initialiser = null;
+		if (stmt.hasInitialiser()) {
+			initialiser = translateExpression(stmt.getInitialiser());
+		}
+		// FIXME: potential for mismatch between Whiley identifiers and Java
+		// identifiers.
+		return new JavaFile.VariableDeclaration(type, stmt.getName().get(), initialiser);
+	}
+
 	private JavaFile.Block translateBlock(Stmt.Block block) {
 		JavaFile.Block jblock = new JavaFile.Block();
-		for (int i=0;i!=block.size();++i) {
+		for (int i = 0; i != block.size(); ++i) {
 			JavaFile.Term jterm = translateStatement(block.get(i));
 			jblock.getTerms().add(jterm);
 		}
@@ -217,10 +236,8 @@ public class JavaCompileTask implements Build.Task {
 			case STMT_if:
 			case STMT_ifelse:
 				return translateIf((Stmt.IfElse) c);
-			// case STMT_indirectinvoke:
-			// return
-			// translateIndirectInvoke((Stmt.IndirectInvoke)
-			// c);
+			case EXPR_indirectinvoke:
+				return translateIndirectInvoke((Expr.IndirectInvoke) c);
 			case EXPR_invoke:
 				return translateInvoke((Expr.Invoke) c);
 			// case STMT_namedblock:
@@ -245,16 +262,17 @@ public class JavaCompileTask implements Build.Task {
 
 	private JavaFile.Term translateAssert(Stmt.Assert stmt) {
 		JavaFile.Term operand = translateExpression(stmt.getCondition());
+		System.out.println("OPERAND = " + operand);
 		return new JavaFile.Assert(operand);
 	}
 
 	private JavaFile.Term translateAssign(Stmt.Assign stmt) {
-		JavaFile.Term[] lhs = translateExpressions((Tuple) stmt.getLeftHandSide());
-		JavaFile.Term[] rhs = translateExpressions(stmt.getRightHandSide());
-		if(lhs.length > 1) {
+		List<JavaFile.Term> lhs = translateExpressions((Tuple) stmt.getLeftHandSide());
+		List<JavaFile.Term> rhs = translateExpressions(stmt.getRightHandSide());
+		if (lhs.size() > 1) {
 			throw new IllegalArgumentException("Need support for multiple assignments");
 		} else {
-			return new JavaFile.Assignment(lhs[0],rhs[0]);
+			return new JavaFile.Assignment(lhs.get(0), rhs.get(0));
 		}
 	}
 
@@ -287,46 +305,89 @@ public class JavaCompileTask implements Build.Task {
 		return new JavaFile.If(operand, trueBranch, falseBranch);
 	}
 
-	private JavaFile.Term translateVariableDeclaration(Decl.Variable stmt) throws ResolutionError {
-		JavaFile.Type type = translateType(stmt.getType());
-		JavaFile.Term initialiser = null;
-		if (stmt.hasInitialiser()) {
-			initialiser = translateExpression(stmt.getInitialiser());
-		}
-		// FIXME: potential for mismatch between Whiley identifiers and Java
-		// identifiers.
-		return new JavaFile.VariableDeclaration(type, stmt.getName().get(), initialiser);
-	}
-
 	private JavaFile.Term translateReturn(Stmt.Return stmt) {
 		JavaFile.Term initialiser = null;
 		Tuple<Expr> returns = stmt.getReturns();
 		if (returns.size() > 0) {
-			JavaFile.Term[] tmp = translateExpressions(returns);
-			if(tmp.length > 1) {
+			List<JavaFile.Term> tmp = translateExpressions(returns);
+			if (tmp.size() > 1) {
 				throw new RuntimeException("need to implement multiple returns");
 			}
-			initialiser = tmp[0];
+			initialiser = tmp.get(0);
 		}
 		return new JavaFile.Return(initialiser);
 	}
 
-	private JavaFile.Term translateSwitch(Stmt.Switch stmt) {
+	private JavaFile.Term translateSwitch(Stmt.Switch stmt) throws ResolutionError {
+		Tuple<Stmt.Case> cases = stmt.getCases();
+		JavaFile.Term[][] groups = new JavaFile.Term[cases.size()][];
+		// Translate all case conditions and see whether can use a switch or not.
+		boolean canSwitch = true;
+		for(int i=0;i!=groups.length;++i) {
+			Stmt.Case c = cases.get(i);
+			Tuple<Expr> conditions = c.getConditions();
+			JavaFile.Term[] terms = new JavaFile.Term[conditions.size()];
+			for(int j=0;j!=terms.length;++j) {
+				terms[j] = translateExpression(conditions.get(j));
+				canSwitch &= (terms[j] instanceof JavaFile.Constant);
+			}
+			groups[i] = terms;
+		}
+		//
+		if(canSwitch) {
+			// Yes, we can switch
+			return translateSwitchAsSwitch(stmt,groups);
+		} else {
+			return translateSwitchAsIfChain(stmt,groups);
+		}
+		//
+
+	}
+
+	private JavaFile.Term translateSwitchAsSwitch(Stmt.Switch stmt, JavaFile.Term[][] groups) {
 		JavaFile.Term condition = translateExpression(stmt.getCondition());
 		Tuple<Stmt.Case> cases = stmt.getCases();
 		ArrayList<JavaFile.Case> jCases = new ArrayList<>();
-		//
 		for (int i = 0; i != cases.size(); ++i) {
 			Stmt.Case c = cases.get(i);
-			for (Expr v : c.getConditions()) {
-				// FIXME: problem here when values are not constants
-				JavaFile.Constant label = (JavaFile.Constant) translateExpression(v);
+			Tuple<Expr> conditions = c.getConditions();
+			for (int j = 0; j != conditions.size(); ++j) {
+				JavaFile.Constant label = (JavaFile.Constant) groups[i][j];
 				JavaFile.Block body = translateBlock(c.getBlock());
 				jCases.add(new JavaFile.Case(label, body));
 			}
 		}
-		//
 		return new JavaFile.Switch(condition, jCases);
+	}
+
+	private JavaFile.Term translateSwitchAsIfChain(Stmt.Switch stmt, JavaFile.Term[][] groups) throws ResolutionError {
+		// FIXME: this obviously doesn't work --- need to figure out a proper temporary
+		// variable name.
+		String tmpVar = "tmp";
+		ArrayList<JavaFile.Term> stmts = new ArrayList<>();
+		Tuple<Stmt.Case> cases = stmt.getCases();
+		JavaFile.Term condition = translateExpression(stmt.getCondition());
+		JavaFile.Type type = translateType(stmt.getCondition().getType());
+		stmts.add(new JavaFile.VariableDeclaration(type, tmpVar, condition));
+		//
+		ArrayList<JavaFile.IfElse.Case> ifconditions = new ArrayList<>();
+		for (int i = 0; i != cases.size(); ++i) {
+			Stmt.Case c = cases.get(i);
+			Tuple<Expr> conditions = c.getConditions();
+			JavaFile.Term cas = null;
+			for (int j = 0; j != conditions.size(); ++j) {
+				// Translate the value itself
+				JavaFile.Term t = translateExpression(conditions.get(j));
+				// Convert it into an equality
+				t = translateOperator(WhileyFile.EXPR_equal, stmt.getCondition().getType(),
+						new JavaFile.VariableAccess(tmpVar), t);
+				cas = (j == 0) ? t : new JavaFile.Operator(JavaFile.Operator.Kind.AND, cas, t);
+			}
+			JavaFile.Block body = translateBlock(c.getBlock());
+			ifconditions.add(new JavaFile.IfElse.Case(cas, body));
+		}
+		stmts.add(new JavaFile.IfElse(ifconditions));
+		return new JavaFile.Block(stmts);
 	}
 
 	private JavaFile.Term translateWhile(Stmt.While stmt) {
@@ -335,101 +396,115 @@ public class JavaCompileTask implements Build.Task {
 		return new JavaFile.While(condition, body);
 	}
 
-	private JavaFile.Term[] translateExpressions(Tuple<Expr> expr) {
-		JavaFile.Term[] terms = new JavaFile.Term[expr.size()];
-		for (int i = 0; i != terms.length; ++i) {
-			terms[i] = translateExpression(expr.get(i));
+	// private JavaFile.Term[] translateExpressions(Tuple<Expr> expr) {
+	// JavaFile.Term[] terms = new JavaFile.Term[expr.size()];
+	// for (int i = 0; i != terms.length; ++i) {
+	// terms[i] = translateExpression(expr.get(i));
+	// }
+	// return terms;
+	// }
+
+	private List<JavaFile.Term> translateExpressions(Tuple<Expr> exprs) {
+		List<JavaFile.Term> arguments = new ArrayList<>();
+		for (int i = 0; i != exprs.size(); ++i) {
+			arguments.add(translateExpression(exprs.get(i)));
 		}
-		return terms;
+		return arguments;
 	}
 
 	// @SuppressWarnings("unchecked")
 	private JavaFile.Term translateExpression(Expr expr) {
 		try {
-		switch (expr.getOpcode()) {
-		case EXPR_logicalnot:
-		case EXPR_integernegation:
-		case EXPR_dereference:
-		case EXPR_new:
-		case EXPR_bitwisenot:
-		case EXPR_is:
-		return translateUnaryOperator((Expr.UnaryOperator) expr);
-		case EXPR_bitwiseshl:
-		case EXPR_bitwiseshr:
-		case EXPR_integeraddition:
-		case EXPR_integersubtraction:
-		case EXPR_integermultiplication:
-		case EXPR_integerdivision:
-		case EXPR_integerremainder:
-		case EXPR_equal:
-		case EXPR_notequal:
-		case EXPR_integerlessthan:
-		case EXPR_integerlessequal:
-		case EXPR_integergreaterthan:
-		case EXPR_integergreaterequal:
-			return translateBinaryOperator((Expr.BinaryOperator) expr);
-		case EXPR_logicaland:
-		case EXPR_logicalor:
-		case EXPR_bitwiseor:
-		case EXPR_bitwisexor:
-		case EXPR_bitwiseand:
-			return translateNaryOperator((Expr.NaryOperator) expr);
-		case EXPR_arraylength:
-			return translateArrayLength((Expr.ArrayLength) expr);
-		case EXPR_arrayaccess:
-			return translateArrayAccess((Expr.ArrayAccess) expr);
-		case EXPR_arrayinitialiser:
-			return translateArrayInitialiser((Expr.ArrayInitialiser) expr);
-		case EXPR_arraygenerator:
-			return translateArrayGenerator((Expr.ArrayGenerator) expr);
-		case EXPR_cast:
-			return translateConvert((Expr.Cast) expr);
-		case EXPR_constant:
-			return translateConst((Expr.Constant) expr);
-		case EXPR_recordaccess:
-			return translateFieldLoad((Expr.RecordAccess) expr);
-		case EXPR_indirectinvoke:
-			return translateIndirectInvoke((Expr.IndirectInvoke) expr);
-		case EXPR_invoke:
-			return translateInvoke((Expr.Invoke) expr);
-		case DECL_lambda:
-			return translateLambda((Decl.Lambda) expr);
-		case EXPR_recordinitialiser:
-			return translateRecordInitialiser((Expr.RecordInitialiser) expr);
-		case EXPR_logicaluniversal:
-		case EXPR_logicalexistential:
-			return translateQuantifier((Expr.Quantifier) expr);
-		case EXPR_variablemove:
-		case EXPR_variablecopy:
-			return translateVariableAccess((Expr.VariableAccess) expr);
-		default:
-			throw new IllegalArgumentException("unknown expression encountered: " + expr);
-		}
-		} catch(ResolutionError e) {
+			switch (expr.getOpcode()) {
+			case EXPR_logicalnot:
+			case EXPR_integernegation:
+			case EXPR_dereference:
+			case EXPR_new:
+			case EXPR_bitwisenot:
+			case EXPR_is:
+				return translateUnaryOperator((Expr.UnaryOperator) expr);
+			case EXPR_bitwiseshl:
+			case EXPR_bitwiseshr:
+			case EXPR_integeraddition:
+			case EXPR_integersubtraction:
+			case EXPR_integermultiplication:
+			case EXPR_integerdivision:
+			case EXPR_integerremainder:
+			case EXPR_equal:
+			case EXPR_notequal:
+			case EXPR_integerlessthan:
+			case EXPR_integerlessequal:
+			case EXPR_integergreaterthan:
+			case EXPR_integergreaterequal:
+				return translateBinaryOperator((Expr.BinaryOperator) expr);
+			case EXPR_logicaland:
+			case EXPR_logicalor:
+			case EXPR_bitwiseor:
+			case EXPR_bitwisexor:
+			case EXPR_bitwiseand:
+				return translateNaryOperator((Expr.NaryOperator) expr);
+			case EXPR_arraylength:
+				return translateArrayLength((Expr.ArrayLength) expr);
+			case EXPR_arrayaccess:
+				return translateArrayAccess((Expr.ArrayAccess) expr);
+			case EXPR_arrayinitialiser:
+				return translateArrayInitialiser((Expr.ArrayInitialiser) expr);
+			case EXPR_arraygenerator:
+				return translateArrayGenerator((Expr.ArrayGenerator) expr);
+			case EXPR_cast:
+				return translateConvert((Expr.Cast) expr);
+			case EXPR_constant:
+				return translateConst((Expr.Constant) expr);
+			case EXPR_recordaccess:
+				return translateFieldLoad((Expr.RecordAccess) expr);
+			case EXPR_indirectinvoke:
+				return translateIndirectInvoke((Expr.IndirectInvoke) expr);
+			case EXPR_invoke:
+				return translateInvoke((Expr.Invoke) expr);
+			case EXPR_lambdaaccess:
+				return translateLambdaAccess((Expr.LambdaAccess) expr);
+			case DECL_lambda:
+				return translateLambda((Decl.Lambda) expr);
+			case EXPR_recordinitialiser:
+				return translateRecordInitialiser((Expr.RecordInitialiser) expr);
+			case EXPR_logicaluniversal:
+			case EXPR_logicalexistential:
+				return translateQuantifier((Expr.Quantifier) expr);
+			case EXPR_variablemove:
+			case EXPR_variablecopy:
+				return translateVariableAccess((Expr.VariableAccess) expr);
+			default:
+				throw new IllegalArgumentException("unknown expression encountered: " + expr);
+			}
+		} catch (ResolutionError e) {
 			throw new RuntimeException("internal failure: " + e.getMessage(), e);
 		}
 	}
 
 	private JavaFile.Term translateUnaryOperator(Expr.UnaryOperator expr) throws ResolutionError {
-		return translateOperator(expr.getOpcode(),expr.getOperand());
+		return translateOperator(expr.getOpcode(), expr.getOperand());
 	}
 
 	private JavaFile.Term translateBinaryOperator(Expr.BinaryOperator expr) throws ResolutionError {
-		return translateOperator(expr.getOpcode(),expr.getFirstOperand(),expr.getSecondOperand());
+		return translateOperator(expr.getOpcode(), expr.getFirstOperand(), expr.getSecondOperand());
 	}
 
 	private JavaFile.Term translateNaryOperator(Expr.NaryOperator expr) throws ResolutionError {
-		return translateOperator(expr.getOpcode(),expr.getOperands().toArray(Expr.class));
+		return translateOperator(expr.getOpcode(), expr.getOperands().toArray(Expr.class));
 	}
 
 	private JavaFile.Term translateOperator(int kind, Expr... operands) throws ResolutionError {
 		// First, translate all children of the operator.
-		List<JavaFile.Term> children = new ArrayList<>();
+		JavaFile.Term[] children = new JavaFile.Term[operands.length];
 		for (int i = 0; i != operands.length; ++i) {
-			children.add(translateExpression(operands[i]));
+			children[i] = translateExpression(operands[i]);
 		}
-		//
 		Type argumentType = operands[0].getType();
+		return translateOperator(kind,argumentType,children);
+	}
+	private JavaFile.Term translateOperator(int kind, Type argumentType, JavaFile.Term... children) throws ResolutionError {
+		//
+
 		if (isDynamicallySized(argumentType)) {
 			// In this case, we have dynamically-sized arguments (e.g.
 			// BigInteger). In such case, we must exploit the various methods on
@@ -437,8 +512,8 @@ public class JavaCompileTask implements Build.Task {
 
 			// FIXME: this coercion should be deprecated with proper support for
 			// fixed-size types in the Whiley Compiler.
-			for (int i = 0; i != children.size(); ++i) {
-				children.set(i, toBigInteger(children.get(i), operands[i].getType()));
+			for (int i = 0; i != children.length; ++i) {
+				children[i] = toBigInteger(children[i], argumentType);
 			}
 			//
 			switch (kind) {
@@ -464,12 +539,12 @@ public class JavaCompileTask implements Build.Task {
 			// employ Java's underlying arithmetic operators, comparators, etc.
 			JavaFile.Operator.Kind k = translate2JavaOperator(kind);
 			// Apply any necessary coercions
-			switch(kind) {
+			switch (kind) {
 			case EXPR_bitwiseshl:
 			case EXPR_bitwiseshr: {
 				// FIXME: in principle, this should be unnecesssary as the
 				// WhileyCompiler should take care of this.
-				children.set(1,toInt(children.get(1),operands[1].getType()));
+				children[1] = toInt(children[1], argumentType);
 			}
 			case EXPR_bitwisexor:
 			case EXPR_bitwiseor:
@@ -484,8 +559,8 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	/**
-	 * Translate an unbound arithmetic operator. For example, the following
-	 * Whiley code:
+	 * Translate an unbound arithmetic operator. For example, the following Whiley
+	 * code:
 	 *
 	 * <pre>
 	 * int x = 1
@@ -503,7 +578,7 @@ public class JavaCompileTask implements Build.Task {
 	 * @param operands
 	 * @return
 	 */
-	private static JavaFile.Term translateUnboundArithmeticOperator(int opcode, List<JavaFile.Term> operands) {
+	private static JavaFile.Term translateUnboundArithmeticOperator(int opcode, JavaFile.Term... operands) {
 		String methodName;
 		switch (opcode) {
 		case EXPR_integernegation:
@@ -528,19 +603,19 @@ public class JavaCompileTask implements Build.Task {
 			throw new IllegalArgumentException("unknown operator kind : " + opcode);
 		}
 		// Construct the method invocation
-		JavaFile.Term receiver = operands.get(0);
-		if (operands.size() == 1) {
+		JavaFile.Term receiver = operands[0];
+		if (operands.length == 1) {
 			return new JavaFile.Invoke(receiver, new String[] { methodName });
 		} else {
-			JavaFile.Term operand = operands.get(1);
+			JavaFile.Term operand = operands[1];
 			return new JavaFile.Invoke(receiver, new String[] { methodName }, operand);
 		}
 	}
 
-	private static JavaFile.Term translateUnboundComparator(int opcode, List<JavaFile.Term> operands) {
+	private static JavaFile.Term translateUnboundComparator(int opcode, JavaFile.Term... operands) {
 		JavaFile.Operator.Kind kind;
-		JavaFile.Term receiver = operands.get(0);
-		JavaFile.Term operand = operands.get(1);
+		JavaFile.Term receiver = operands[0];
+		JavaFile.Term operand = operands[1];
 		//
 		switch (opcode) {
 		case EXPR_notequal: {
@@ -583,7 +658,7 @@ public class JavaCompileTask implements Build.Task {
 	private JavaFile.Term translateArrayInitialiser(Expr.ArrayInitialiser expr) throws ResolutionError {
 		Tuple<Expr> operands = expr.getOperands();
 		List<JavaFile.Term> children = new ArrayList<>();
-		for (int i = 0; i != expr.size(); ++i) {
+		for (int i = 0; i != operands.size(); ++i) {
 			children.add(translateExpression(operands.get(i)));
 		}
 		JavaFile.Array type = (JavaFile.Array) translateType(expr.getType());
@@ -612,7 +687,7 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	private JavaFile.Term translateConstant(Value c) throws ResolutionError {
-		//Type type = c.type();
+		// Type type = c.type();
 		Object value;
 		if (c instanceof Value.Null) {
 			value = null;
@@ -633,10 +708,11 @@ public class JavaCompileTask implements Build.Task {
 				return translateFixedIntegerConstant(bi);
 			}
 		} else {
-			return translateUtf8Constant(((Value.UTF8)c).get());
+			return translateUtf8Constant(((Value.UTF8) c).get());
 		}
 		return new JavaFile.Constant(value);
 	}
+
 	private static long i8_MIN = -128;
 	private static long i8_MAX = 127;
 	private static long u8_MAX = 255;
@@ -651,28 +727,27 @@ public class JavaCompileTask implements Build.Task {
 		try {
 			long v = i.longValueExact();
 			// FIXME: the exact best way to handle this is unclear to me.
-//			if (v >= 0 && v <= u8_MAX) {
-//				return TYPE_U8;
-//			} else if (v >= 0 && v <= u16_MAX) {
-//				return TYPE_U16;
-//			} else if (v >= 0 && v <= u32_MAX) {
-//				return TYPE_U32;
-//			} else if (v >= i8_MIN && v <= i8_MAX) {
-//				return TYPE_I8;
-//			} else if (v >= i16_MIN && v <= i16_MAX) {
-//				return TYPE_I16;
-//			} else if (v >= i32_MIN && v <= i32_MAX) {
-//				return TYPE_I32;
-//			}
-		} catch(ArithmeticException ex) {
+			// if (v >= 0 && v <= u8_MAX) {
+			// return TYPE_U8;
+			// } else if (v >= 0 && v <= u16_MAX) {
+			// return TYPE_U16;
+			// } else if (v >= 0 && v <= u32_MAX) {
+			// return TYPE_U32;
+			// } else if (v >= i8_MIN && v <= i8_MAX) {
+			// return TYPE_I8;
+			// } else if (v >= i16_MIN && v <= i16_MAX) {
+			// return TYPE_I16;
+			// } else if (v >= i32_MIN && v <= i32_MAX) {
+			// return TYPE_I32;
+			// }
+		} catch (ArithmeticException ex) {
 		}
 		return Type.Int;
 	}
 
 	/**
-	 * Translate an integer constant which will be assigned to a fixed-sized
-	 * Java variable. Such constants can be safely expressed as integer
-	 * literals.
+	 * Translate an integer constant which will be assigned to a fixed-sized Java
+	 * variable. Such constants can be safely expressed as integer literals.
 	 *
 	 * @param constant
 	 * @return
@@ -689,10 +764,9 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	/**
-	 * Translate an integer constant which will be assigned to a
-	 * dynamically-sized Java variable. Such constants cannot be expressed as
-	 * integer literals and must be converted into instances of
-	 * <code>BigInteger</code>.
+	 * Translate an integer constant which will be assigned to a dynamically-sized
+	 * Java variable. Such constants cannot be expressed as integer literals and
+	 * must be converted into instances of <code>BigInteger</code>.
 	 *
 	 * @param constant
 	 * @return
@@ -718,28 +792,38 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	private JavaFile.Term translateIndirectInvoke(Expr.IndirectInvoke expr) {
-		// Location<?>[] operands = expr.getOperands();
-		// writeExpression(operands[0]);
-		// out.print("(");
-		// for (int i = 1; i != operands.length; ++i) {
-		// if (i != 1) {
-		// out.print(", ");
-		// }
-		// writeExpression(operands[i]);
-		// }
-		// out.print(")");
-		return null;
+		JavaFile.Term receiver = translateExpression(expr.getSource());
+		List<JavaFile.Term> arguments = translateExpressions(expr.getArguments());
+		return new JavaFile.Invoke(receiver, "apply", arguments);
 	}
 
 	private JavaFile.Term translateInvoke(Expr.Invoke expr) {
 		List<String> path = new ArrayList<>();
 		Tuple<Expr> operands = expr.getOperands();
 		List<JavaFile.Term> arguments = new ArrayList<>();
+		// FIXME: need to do better here
 		path.add(expr.getName().toNameID().name());
 		for (int i = 0; i != operands.size(); ++i) {
 			arguments.add(translateExpression(operands.get(i)));
 		}
 		return new JavaFile.Invoke(null, path, arguments);
+	}
+
+	private JavaFile.Term translateLambdaAccess(Expr.LambdaAccess expr) throws ResolutionError {
+		Tuple<Type> types = expr.getSignature().getParameters();
+		List<JavaFile.VariableDeclaration> parameters = new ArrayList<>();
+		List<JavaFile.Term> arguments = new ArrayList<>();
+		for (int i = 0; i != types.size(); ++i) {
+			String name = "p" + i;
+			JavaFile.Type type = translateType(types.get(i));
+			parameters.add(new JavaFile.VariableDeclaration(type, name));
+			arguments.add(new JavaFile.VariableAccess(name));
+		}
+		List<String> path = new ArrayList<>();
+		// FIXME: need to do better here
+		path.add(expr.getName().toNameID().name());
+		JavaFile.Term body = new JavaFile.Invoke(null, path, arguments);
+		return new JavaFile.Lambda(parameters, body);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -784,7 +868,7 @@ public class JavaCompileTask implements Build.Task {
 			Type.Nominal nt = (Type.Nominal) type;
 			// FIXME: this is surely broken
 			jType = new JavaFile.Reference(nt.getName().toNameID().name());
-		} else if(type instanceof Type.Record) {
+		} else if (type instanceof Type.Record) {
 			JavaFile.Class unnamedStruct = generateAnonymousStruct((Type.Record) type);
 			jType = new JavaFile.Reference(unnamedStruct.getName());
 		} else {
@@ -802,32 +886,16 @@ public class JavaCompileTask implements Build.Task {
 
 	@SuppressWarnings("unchecked")
 	private JavaFile.Term translateQuantifier(Expr.Quantifier c) {
-		// out.print(quantifierKind(c));
-		// out.print(" { ");
-		// for (int i = 0; i != c.numberOfOperandGroups(); ++i) {
-		// Location<?>[] range = c.getOperandGroup(i);
-		// if (i != 0) {
-		// out.print(", ");
-		// }
-		// Location<VariableDeclaration> v = (Location<VariableDeclaration>)
-		// range[SyntaxTree.VARIABLE];
-		// out.print(v.getBytecode().getName());
-		// out.print(" in ");
-		// writeExpression(range[SyntaxTree.START]);
-		// out.print("..");
-		// writeExpression(range[SyntaxTree.END]);
-		// }
-		// out.print(" | ");
-		// writeExpression(c.getOperand(SyntaxTree.CONDITION));
-		// out.print(" } ");
-		return null;
+		// FIXME: Translate into a for loop embedded in a Block. Then JavaFileWriter or
+		// JvmFileWriter is responsible for dealing with it.
+		return new JavaFile.Constant(false);
 	}
 
 	private JavaFile.Term translateVariableAccess(Expr.VariableAccess expr) throws ResolutionError {
 		Decl.Variable vd = expr.getVariableDeclaration();
 		JavaFile.Term t = new JavaFile.VariableAccess(vd.getName().toString());
 		JavaFile.Type type = translateType(expr.getType());
-		if (expr.getOpcode() == EXPR_variablecopy && !isCopyable(type)) {
+		if (expr.getOpcode() == EXPR_variablecopy && !isCopyable(expr.getType())) {
 			// Since this type is not copyable, we need to clone it to ensure
 			// that ownership is properly preserved.
 			t = new JavaFile.Invoke(t, "clone");
@@ -848,10 +916,10 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	/**
-	 * Convert a sequence of zero or more types which represent the return
-	 * values of a function or method. In the case of exactly one type, then it
-	 * just returns the conversion of that type. Otherwise, it returns the type
-	 * of an object array which will hold the necessary arguments.
+	 * Convert a sequence of zero or more types which represent the return values of
+	 * a function or method. In the case of exactly one type, then it just returns
+	 * the conversion of that type. Otherwise, it returns the type of an object
+	 * array which will hold the necessary arguments.
 	 *
 	 * @param types
 	 * @return
@@ -868,11 +936,11 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	/**
-	 * Convert a Whiley type into its equivalent Java form. For example, the
-	 * Whiley type <code>int:32</code> corresponds to the Java type
-	 * <code>int</code>. Some conversions are <i>lossy</i>, meaning that we lose
-	 * information during the conversion. For example, the Whiley union type
-	 * <code>int|bool</code> is reduced to just <code>Object</code> in Java.
+	 * Convert a Whiley type into its equivalent Java form. For example, the Whiley
+	 * type <code>int:32</code> corresponds to the Java type <code>int</code>. Some
+	 * conversions are <i>lossy</i>, meaning that we lose information during the
+	 * conversion. For example, the Whiley union type <code>int|bool</code> is
+	 * reduced to just <code>Object</code> in Java.
 	 *
 	 * @param type
 	 * @throws ResolutionError
@@ -895,6 +963,10 @@ public class JavaCompileTask implements Build.Task {
 		} else if (type instanceof Type.Record) {
 			JavaFile.Class struct = generateAnonymousStruct((Type.Record) type);
 			return new JavaFile.Reference(struct.getName());
+		} else if (type instanceof Type.Callable) {
+			Type.Callable tc = (Type.Callable) type;
+			// FIXME: this is a hack for now
+			return new JavaFile.Reference("Function");
 		} else {
 			// Default
 			return new JavaFile.Reference("Object");
@@ -903,14 +975,15 @@ public class JavaCompileTask implements Build.Task {
 
 	private JavaFile.Type[] translateTypes(Type... types) throws ResolutionError {
 		JavaFile.Type[] rs = new JavaFile.Type[types.length];
-		for(int i=0;i!=types.length;++i) {
+		for (int i = 0; i != types.length; ++i) {
 			rs[i] = translateType(types[i]);
 		}
 		return rs;
 	}
+
 	private JavaFile.Class generateAnonymousStruct(Type.Record type) throws ResolutionError {
 		JavaFile.Class r = unnamedTypes.get(type);
-		if(r == null) {
+		if (r == null) {
 			List<JavaFile.Field> fields = translateFieldDeclarations(type);
 			r = JavaCodeGenerator.generateStruct("Struct" + unnamedTypes.size(), fields);
 			unnamedTypes.put(type, r);
@@ -946,20 +1019,20 @@ public class JavaCompileTask implements Build.Task {
 
 	private static Type TYPE(String... args) {
 		Identifier[] components = new Identifier[args.length];
-		for(int i=0;i!=args.length;++i) {
+		for (int i = 0; i != args.length; ++i) {
 			components[i] = new Identifier(args[i]);
 		}
 		return new Type.Nominal(new Name(components));
 	}
-	private static Type TYPE_I8 = TYPE("std","integer","i8");
-    private static Type TYPE_I16 = TYPE("std","integer","i17");
-    private static Type TYPE_I32 = TYPE("std","integer","i32");
-    private static Type TYPE_I64 = TYPE("std","integer","i64");
-    private static Type TYPE_U8 = TYPE("std","integer","u8");
-    private static Type TYPE_U16 = TYPE("std","integer","u16");
-    private static Type TYPE_U32 = TYPE("std","integer","u32");
-    private static Type TYPE_U64 = TYPE("std","integer","u64");
 
+	private static Type TYPE_I8 = TYPE("std", "integer", "i8");
+	private static Type TYPE_I16 = TYPE("std", "integer", "i17");
+	private static Type TYPE_I32 = TYPE("std", "integer", "i32");
+	private static Type TYPE_I64 = TYPE("std", "integer", "i64");
+	private static Type TYPE_U8 = TYPE("std", "integer", "u8");
+	private static Type TYPE_U16 = TYPE("std", "integer", "u16");
+	private static Type TYPE_U32 = TYPE("std", "integer", "u32");
+	private static Type TYPE_U64 = TYPE("std", "integer", "u64");
 
 	private static JavaFile.Reference JAVA_MATH_BIGINTEGER = new JavaFile.Reference("BigInteger");
 
@@ -982,10 +1055,9 @@ public class JavaCompileTask implements Build.Task {
 	};
 
 	/**
-	 * Convert a given term which returns a value of integer type into a Java
-	 * int. Essentially, if the returned value is a BigInteger then this will
-	 * invoke <code>BigInteger.intValue()</code>. Otherwise, it's a
-	 * no-operation.
+	 * Convert a given term which returns a value of integer type into a Java int.
+	 * Essentially, if the returned value is a BigInteger then this will invoke
+	 * <code>BigInteger.intValue()</code>. Otherwise, it's a no-operation.
 	 *
 	 * @param term
 	 *            The Java term whose value is being converted to an
@@ -1005,10 +1077,10 @@ public class JavaCompileTask implements Build.Task {
 	}
 
 	/**
-	 * Convert a given term which returns a value of Java int or long type into
-	 * a Java BigInteger. Essentially, if the returned value is a such a type
-	 * then this will invoke <code>BigInteger.valueOf()</code>. Otherwise, it's
-	 * a no-operation.
+	 * Convert a given term which returns a value of Java int or long type into a
+	 * Java BigInteger. Essentially, if the returned value is a such a type then
+	 * this will invoke <code>BigInteger.valueOf()</code>. Otherwise, it's a
+	 * no-operation.
 	 *
 	 * @param term
 	 *            The Java term whose value is being converted to a
@@ -1029,18 +1101,23 @@ public class JavaCompileTask implements Build.Task {
 
 	/**
 	 * Return true if the type in question can be copied directly. More
-	 * specifically, if a bitwise copy of the value is sufficient to fully copy
-	 * it. In general, this is true for primitive data types in Java. But, for
-	 * array types or general class types, it is not true (since these are
-	 * references into the heap). As an exception, class types which are known
-	 * to be immutable can be safely considered as copyable.
+	 * specifically, if a bitwise copy of the value is sufficient to fully copy it.
+	 * In general, this is true for primitive data types in Java. But, for array
+	 * types or general class types, it is not true (since these are references into
+	 * the heap). As an exception, class types which are known to be immutable can
+	 * be safely considered as copyable.
 	 *
 	 * @param type
 	 * @return
+	 * @throws ResolutionError
 	 */
-	private static boolean isCopyable(JavaFile.Type type) {
-		if (type instanceof JavaFile.Primitive || type == JAVA_MATH_BIGINTEGER) {
+	private boolean isCopyable(WhileyFile.Type type) throws ResolutionError {
+		if (type instanceof WhileyFile.Type.Primitive || type instanceof WhileyFile.Type.Callable) {
 			return true;
+		} else if (type instanceof WhileyFile.Type.Nominal) {
+			Type.Nominal tn = (Type.Nominal) type;
+			Decl.Type decl = typeSystem.resolveExactly(tn.getName(), Decl.Type.class);
+			return isCopyable(decl.getType());
 		} else {
 			// FIXME: could do better here, e.g. for immutable reference types
 			return false;

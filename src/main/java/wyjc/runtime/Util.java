@@ -30,6 +30,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 public class Util {
+	public static boolean forall() {
+		return false;
+	}
+
 	public static java.lang.String toRealString(Object o) {
 		if(o == null) {
 			return "null";

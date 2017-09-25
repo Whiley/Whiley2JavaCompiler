@@ -76,16 +76,8 @@ public class JavaFileWriter {
 		out.print(" ");
 		out.print(method.getName());
 		out.print("(");
-		List<Pair<JavaFile.Type,String>> parameters = method.getParameters();
-		for(int i=0;i!=parameters.size();++i) {
-			if(i != 0) {
-				out.print(", ");
-			}
-			Pair<JavaFile.Type,String> p = parameters.get(i);
-			writeType(p.first());
-			out.print(" ");
-			out.print(p.second());
-		}
+		writeVariableDeclarations(method.getParameters());
+
 		out.print(")");
 		if(method.getBody() != null) {
 			writeBlock(indent,method.getBody());
@@ -93,7 +85,6 @@ public class JavaFileWriter {
 		} else {
 			out.println(";");
 		}
-
 	}
 
 	private void write(int indent, JavaFile.Constructor constructor) {
@@ -101,16 +92,7 @@ public class JavaFileWriter {
 		writeModifiers(constructor.getModifiers());
 		out.print(constructor.getName());
 		out.print("(");
-		List<Pair<JavaFile.Type,String>> parameters = constructor.getParameters();
-		for(int i=0;i!=parameters.size();++i) {
-			if(i != 0) {
-				out.print(", ");
-			}
-			Pair<JavaFile.Type,String> p = parameters.get(i);
-			writeType(p.first());
-			out.print(" ");
-			out.print(p.second());
-		}
+		writeVariableDeclarations(constructor.getParameters());
 		out.print(")");
 		if(constructor.getBody() != null) {
 			writeBlock(indent,constructor.getBody());
@@ -144,6 +126,9 @@ public class JavaFileWriter {
 			writeAssert(indent,(JavaFile.Assert) term);
 		} else if(term instanceof JavaFile.Assignment) {
 			writeAssignment(indent,(JavaFile.Assignment) term);
+		} else if(term instanceof JavaFile.Block) {
+			writeBlock(indent, (JavaFile.Block) term);
+			out.println();
 		} else if(term instanceof JavaFile.Break) {
 			writeBreak(indent,(JavaFile.Break) term);
 		} else if(term instanceof JavaFile.Continue) {
@@ -152,6 +137,8 @@ public class JavaFileWriter {
 			writeDoWhile(indent,(JavaFile.DoWhile) term);
 		} else if(term instanceof JavaFile.If) {
 			writeIf(indent,(JavaFile.If) term);
+		} else if(term instanceof JavaFile.IfElse) {
+			writeIfElse(indent,(JavaFile.IfElse) term);
 		} else if(term instanceof JavaFile.Return) {
 			writeReturn(indent,(JavaFile.Return) term);
 		} else if(term instanceof JavaFile.VariableDeclaration) {
@@ -204,6 +191,23 @@ public class JavaFileWriter {
 		out.println();
 	}
 
+	private void writeIfElse(int indent, JavaFile.IfElse term) {
+		List<JavaFile.IfElse.Case> cases = term.getCases();
+		for(int i=0;i!=cases.size();++i) {
+			JavaFile.IfElse.Case cAse = cases.get(i);
+			if(i != 0) {
+				out.print(" else ");
+			}
+			if(cAse.getLabel() != null) {
+				out.print("if(");
+				writeExpression(cAse.getLabel());
+				out.print(") ");
+			}
+			writeBlock(indent, cAse.getBlock());
+		}
+		out.println();
+	}
+
 	private void writeReturn(int indent, JavaFile.Return term) {
 		out.print("return");
 		if(term.getInitialiser() != null) {
@@ -211,6 +215,18 @@ public class JavaFileWriter {
 			writeExpression(term.getInitialiser());
 		}
 		out.println(";");
+	}
+
+	private void writeVariableDeclarations(List<JavaFile.VariableDeclaration> decls) {
+		for(int i=0;i!=decls.size();++i) {
+			if(i != 0) {
+				out.print(", ");
+			}
+			JavaFile.VariableDeclaration p = decls.get(i);
+			writeType(p.getType());
+			out.print(" ");
+			out.print(p.getName());
+		}
 	}
 
 	private void writeVariableDeclaration(int indent, JavaFile.VariableDeclaration term) {
@@ -258,6 +274,8 @@ public class JavaFileWriter {
 			writeInstanceOf((JavaFile.InstanceOf) term);
 		} else if(term instanceof JavaFile.Invoke) {
 			writeInvoke((JavaFile.Invoke) term);
+		} else if(term instanceof JavaFile.Lambda) {
+			writeLambda((JavaFile.Lambda) term);
 		} else if(term instanceof JavaFile.New) {
 			writeNew((JavaFile.New) term);
 		} else if(term instanceof JavaFile.NewArray) {
@@ -405,6 +423,13 @@ public class JavaFileWriter {
 
 	private void writeVariableAccess(JavaFile.VariableAccess term) {
 		out.print(term.getName());
+	}
+
+	private void writeLambda(JavaFile.Lambda term) {
+		out.print("(");
+		writeVariableDeclarations(term.getParameters());
+		out.print(") -> ");
+		writeExpression(term.getBody());
 	}
 
 	private void writeNew(JavaFile.New term) {

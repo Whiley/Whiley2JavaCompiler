@@ -15,7 +15,6 @@ import wybs.lang.CompilationUnit;
 import wybs.util.AbstractCompilationUnit;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
-import wycc.util.Pair;
 import wyjc.io.JavaFileWriter;
 
 public class JavaFile extends AbstractCompilationUnit {
@@ -159,7 +158,7 @@ public class JavaFile extends AbstractCompilationUnit {
 	 */
 	public static class Method extends AbstractDeclaration implements Declaration {
 		private Type returnType;
-		private List<wycc.util.Pair<Type,String>> parameters = new ArrayList<>();
+		private List<VariableDeclaration> parameters = new ArrayList<>();
 		private Block body;
 
 		public Method(String name, Type returnType) {
@@ -171,7 +170,7 @@ public class JavaFile extends AbstractCompilationUnit {
 			return returnType;
 		}
 
-		public List<wycc.util.Pair<Type,String>> getParameters() {
+		public List<VariableDeclaration> getParameters() {
 			return parameters;
 		}
 
@@ -185,14 +184,14 @@ public class JavaFile extends AbstractCompilationUnit {
 	}
 
 	public static class Constructor extends AbstractDeclaration implements Declaration {
-		private List<wycc.util.Pair<Type,String>> parameters = new ArrayList<>();
+		private List<VariableDeclaration> parameters = new ArrayList<>();
 		private Block body;
 
 		public Constructor(String name) {
 			super(name);
 		}
 
-		public List<wycc.util.Pair<Type,String>> getParameters() {
+		public List<VariableDeclaration> getParameters() {
 			return parameters;
 		}
 
@@ -218,6 +217,35 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class VariableDeclaration extends AbstractDeclaration implements Term {
+		private Type type;
+		private Term initialiser;
+
+		public VariableDeclaration(Type type, String name) {
+			super(name);
+			this.type = type;
+		}
+
+		public VariableDeclaration(Type type, String name, Term initialiser) {
+			super(name);
+			this.type = type;
+			this.initialiser = initialiser;
+		}
+
+		public Type getType() {
+			return type;
+		}
+
+		public boolean hasInitialisr() {
+			return initialiser != null;
+		}
+
+		public Term getInitialiser() {
+			return initialiser;
+		}
+	}
+
+
 	/**
 	 * Represents either a statement or expression in a Java source file.
 	 *
@@ -229,7 +257,15 @@ public class JavaFile extends AbstractCompilationUnit {
 	}
 
 	public static class Block implements Term {
-		private List<Term> terms = new ArrayList<>();
+		private List<Term> terms;
+
+		public Block() {
+			terms = new ArrayList<>();
+		}
+
+		public Block(List<Term> terms) {
+			this.terms = new ArrayList<>(terms);
+		}
 
 		public List<Term> getTerms() {
 			return terms;
@@ -386,6 +422,36 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class IfElse implements Term {
+		private List<Case> cases;
+
+		public IfElse(List<Case> cases) {
+			this.cases = cases;
+		}
+
+		public List<Case> getCases() {
+			return cases;
+		}
+
+		public static class Case implements Term {
+			private Term condition;
+			private Block body;
+
+			public Case(Term label, Block body) {
+				this.condition = label;
+				this.body = body;
+			}
+
+			public Term getLabel() {
+				return condition;
+			}
+
+			public Block getBlock() {
+				return body;
+			}
+		}
+	}
+
 	public static class InstanceOf implements Term {
 		private Term lhs;
 		private Type rhs;
@@ -422,6 +488,14 @@ public class JavaFile extends AbstractCompilationUnit {
 			this.arguments = Arrays.asList(arguments);
 		}
 
+		public Invoke(Term receiver, String name, List<Term> arguments) {
+			this.receiver = receiver;
+			this.path = new ArrayList<>();
+			this.path.add(name);
+			this.arguments = new ArrayList<>(arguments);
+		}
+
+
 		public Invoke(Term receiver, List<String> path, List<Term> arguments) {
 			this.receiver = receiver;
 			this.path = new ArrayList<>(path);
@@ -438,6 +512,24 @@ public class JavaFile extends AbstractCompilationUnit {
 
 		public List<Term> getArguments() {
 			return arguments;
+		}
+	}
+
+	public static class Lambda implements Term {
+		private List<VariableDeclaration> parameters;
+		private Term body;
+
+		public Lambda(List<VariableDeclaration> parameters, Term body) {
+			this.parameters = parameters;
+			this.body = body;
+		}
+
+		public List<VariableDeclaration> getParameters() {
+			return parameters;
+		}
+
+		public Term getBody() {
+			return body;
 		}
 	}
 
@@ -554,25 +646,6 @@ public class JavaFile extends AbstractCompilationUnit {
 
 		public List<Case> getCases() {
 			return cases;
-		}
-	}
-
-	public static class VariableDeclaration extends AbstractDeclaration implements Term {
-		private Type type;
-		private Term initialiser;
-
-		public VariableDeclaration(Type type, String name, Term initialiser) {
-			super(name);
-			this.type = type;
-			this.initialiser = initialiser;
-		}
-
-		public Type getType() {
-			return type;
-		}
-
-		public Term getInitialiser() {
-			return initialiser;
 		}
 	}
 
