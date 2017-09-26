@@ -109,6 +109,10 @@ public class JavaFileWriter {
 		writeType(fieldDecl.getType());
 		out.print(" ");
 		out.print(fieldDecl.getName());
+		if(fieldDecl.hasInitialisr()) {
+			out.print(" = ");
+			writeExpression(fieldDecl.getInitialiser());
+		}
 		out.println(";");
 	}
 

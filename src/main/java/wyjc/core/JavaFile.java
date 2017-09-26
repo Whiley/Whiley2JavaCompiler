@@ -76,7 +76,7 @@ public class JavaFile extends AbstractCompilationUnit {
 	 * @author David J. Pearce
 	 *
 	 */
-	public interface Declaration {
+	public interface Declaration extends Term {
 		List<Modifier> getModifiers();
 	}
 
@@ -204,16 +204,14 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
-	public static class Field extends AbstractDeclaration implements Declaration {
-		private Type type;
+	public static class Field extends VariableDeclaration implements Declaration {
 
 		public Field(Type type, String name) {
-			super(name);
-			this.type = type;
+			super(type,name);
 		}
 
-		public Type getType() {
-			return type;
+		public Field(Type type, String name, Term initialiser) {
+			super(type,name,initialiser);
 		}
 	}
 
@@ -686,7 +684,7 @@ public class JavaFile extends AbstractCompilationUnit {
 	 * @author David J. Pearce
 	 *
 	 */
-	public interface Type {
+	public interface Type extends Term {
 
 	}
 
