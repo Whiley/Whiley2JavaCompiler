@@ -116,7 +116,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		jf.getDeclarations().add(new JavaFile.Import("java", "math", "BigInteger"));
 		jf.getDeclarations().add(new JavaFile.Import("java", "util", "Arrays"));
 		jf.getDeclarations().add(new JavaFile.Import("java", "util", "function", "Function"));
-		jf.getDeclarations().add(new JavaFile.Import("wyjc", "runtime", "Struct"));
+		jf.getDeclarations().add(new JavaFile.Import("wyjc", "runtime", "Wy"));
 
 		String className = wf.getEntry().id().last();
 		JavaFile.Class jcd = new JavaFile.Class(className);
@@ -483,21 +483,21 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	@Override
 	public JavaFile.Term visitEqual(Expr.Equal expr, JavaFile.Class parent) {
-		if(isDynamicallySized(expr.getType())) {
+		if (isDynamicallySized(expr.getFirstOperand().getType())) {
 			JavaFile.Term lhs = visitExpression(expr.getFirstOperand(), parent);
 			JavaFile.Term rhs = visitExpression(expr.getSecondOperand(), parent);
-			return new JavaFile.Invoke(lhs, "equal", rhs);
+			return new JavaFile.Invoke(null, new String[] { "Wy", "equals" }, lhs, rhs);
 		} else {
-			return translateOperator(JavaFile.Operator.Kind.EQ,expr.getFirstOperand(),expr.getSecondOperand());
+			return translateOperator(JavaFile.Operator.Kind.EQ, expr.getFirstOperand(), expr.getSecondOperand());
 		}
 	}
 
 	@Override
 	public JavaFile.Term visitNotEqual(Expr.NotEqual expr, JavaFile.Class parent) {
-		if(isDynamicallySized(expr.getType())) {
+		if (isDynamicallySized(expr.getFirstOperand().getType())) {
 			JavaFile.Term lhs = visitExpression(expr.getFirstOperand(), parent);
 			JavaFile.Term rhs = visitExpression(expr.getSecondOperand(), parent);
-			JavaFile.Term eq = new JavaFile.Invoke(lhs, "equal", rhs);
+			JavaFile.Term eq = new JavaFile.Invoke(null, new String[] { "Wy", "equals" }, lhs, rhs);
 			return new JavaFile.Operator(JavaFile.Operator.Kind.NOT, eq);
 		} else {
 			return translateOperator(JavaFile.Operator.Kind.NEQ,expr.getFirstOperand(),expr.getSecondOperand());
@@ -678,16 +678,12 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	@Override
 	public JavaFile.Term visitUniversalQuantifier(Expr.UniversalQuantifier c, JavaFile.Class parent) {
-		// FIXME: Translate into a for loop embedded in a Block. Then JavaFileWriter or
-		// JvmFileWriter is responsible for dealing with it.
-		return new JavaFile.Constant(false);
+		return translateQuantifier(c,parent);
 	}
 
 	@Override
 	public JavaFile.Term visitExistentialQuantifier(Expr.ExistentialQuantifier c, JavaFile.Class parent) {
-		// FIXME: Translate into a for loop embedded in a Block. Then JavaFileWriter or
-		// JvmFileWriter is responsible for dealing with it.
-		return new JavaFile.Constant(false);
+		return translateQuantifier(c,parent);
 	}
 
 	@Override
@@ -785,6 +781,55 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	// ===================================================================================
 	// Translation Helpers
 	// ===================================================================================
+
+	private JavaFile.Term translateQuantifier(Expr.Quantifier expr, JavaFile.Class parent) {
+		String name = "block$" + expr.getIndex();
+		// Construct the method in which we will execute this quantifier.
+		JavaFile.Method method = new JavaFile.Method(name, JavaFile.BOOLEAN);
+		method.getModifiers().add(JavaFile.Modifier.STATIC);
+		method.getModifiers().add(JavaFile.Modifier.PRIVATE);
+		List<JavaFile.Term> terms = new ArrayList<>();
+		// Translate each of the parameters into a for loop
+		terms.add(translateQuantifierBody(expr,0,parent));
+		// Add final return statement
+		terms.add(new JavaFile.Return(new JavaFile.Constant(expr instanceof Expr.UniversalQuantifier)));
+		// Create method body and add to enclosing class
+		method.setBody(new JavaFile.Block(terms));
+		parent.getDeclarations().add(method);
+		// Finally, return an invocation to this
+		return new JavaFile.Invoke(null, name);
+	}
+
+	private JavaFile.Term translateQuantifierBody(Expr.Quantifier expr, int i, JavaFile.Class parent) {
+		Tuple<Decl.Variable> parameters = expr.getParameters();
+		if(i >= parameters.size()) {
+			// base case
+			JavaFile.Term condition = visitExpression(expr.getOperand(), parent);
+			JavaFile.Block trueBranch = new JavaFile.Block();
+			if(expr instanceof Expr.UniversalQuantifier) {
+				condition = new JavaFile.Operator(JavaFile.Operator.Kind.NOT, condition);
+				trueBranch.getTerms().add(new JavaFile.Return(new JavaFile.Constant(false)));
+			} else {
+				trueBranch.getTerms().add(new JavaFile.Return(new JavaFile.Constant(true)));
+			}
+			return new JavaFile.If(condition, trueBranch, null);
+		} else {
+			Decl.Variable parameter = parameters.get(i);
+			JavaFile.Type type = JavaFile.INT;
+			Expr.ArrayRange range = (Expr.ArrayRange) parameter.getInitialiser();
+			JavaFile.Term start = toInt(visitExpression(range.getFirstOperand(), parent),parameter.getType());
+			JavaFile.Term end = toInt(visitExpression(range.getSecondOperand(), parent),parameter.getType());
+			JavaFile.VariableDeclaration decl = new JavaFile.VariableDeclaration(type, parameter.getName().get(),
+					start);
+			JavaFile.VariableAccess var = new JavaFile.VariableAccess(parameter.getName().get());
+			JavaFile.Term condition = new JavaFile.Operator(JavaFile.Operator.Kind.LT, var, end);
+			JavaFile.Term increment = new JavaFile.Assignment(var,
+					new JavaFile.Operator(JavaFile.Operator.Kind.ADD, var, new JavaFile.Constant(1)));
+			JavaFile.Block body = new JavaFile.Block();
+			body.getTerms().add(translateQuantifierBody(expr, i + 1, parent));
+			return new JavaFile.For(decl, condition, increment, body);
+		}
+	}
 
 	private JavaFile.Term translateRecordSchema(Type type) {
 		if (type instanceof Type.Nominal) {
@@ -1013,13 +1058,14 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	public boolean isDynamicallySized(Type type) {
 		try {
 			// FIXME: this is basically completely broken.
-			if (typeSystem.isRawCoerciveSubtype(Type.Int, type, null)) {
-				return true;
-			} else if (typeSystem.extractReadableArray(type, null) != null) {
-				return true;
-			} else {
-				// FIXME: need to recursively check component types for records.
+			if (typeSystem.isRawCoerciveSubtype(Type.Bool, type, null)) {
 				return false;
+			} else if (typeSystem.isRawCoerciveSubtype(Type.Byte, type, null)) {
+				return false;
+			} else if (typeSystem.isRawCoerciveSubtype(Type.Null, type, null)) {
+				return false;
+			} else {
+				return true;
 			}
 		} catch (NameResolver.ResolutionError e) {
 			throw new RuntimeException(e);
@@ -1035,7 +1081,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	}
 	private static JavaFile.Reference JAVA_MATH_BIGINTEGER = new JavaFile.Reference("BigInteger");
 	private static JavaFile.Reference JAVA_LANG_OBJECT = new JavaFile.Reference("Object");
-	private static final JavaFile.Reference WHILEY_RECORD = new JavaFile.Reference("Struct");
+	private static final JavaFile.Reference WHILEY_RECORD = new JavaFile.Reference("Wy","Struct");
 
 	/**
 	 * Convert a given term which returns a value of integer type into a Java int.

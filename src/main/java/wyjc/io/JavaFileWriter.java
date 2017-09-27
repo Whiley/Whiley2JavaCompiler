@@ -139,6 +139,8 @@ public class JavaFileWriter {
 			writeContinue(indent,(JavaFile.Continue) term);
 		} else if(term instanceof JavaFile.DoWhile) {
 			writeDoWhile(indent,(JavaFile.DoWhile) term);
+		} else if(term instanceof JavaFile.For) {
+			writeFor(indent,(JavaFile.For) term);
 		} else if(term instanceof JavaFile.If) {
 			writeIf(indent,(JavaFile.If) term);
 		} else if(term instanceof JavaFile.IfElse) {
@@ -164,9 +166,7 @@ public class JavaFileWriter {
 	}
 
 	private void writeAssignment(int indent, JavaFile.Assignment term) {
-		writeExpression(term.getLefthandSide());
-		out.print(" = ");
-		writeExpression(term.getRighthandSide());
+		writeAssignment(term);
 		out.println(";");
 	}
 
@@ -184,6 +184,28 @@ public class JavaFileWriter {
 		out.print(" while(");
 		writeExpression(term.getCondition());
 		out.println(");");
+	}
+
+	private void writeFor(int indent, JavaFile.For term) {
+		out.print("for(");
+		writeForVariableDeclaration(term.getInitialiser());
+		writeExpression(term.getCondition());
+		out.print(";");
+		writeExpression(term.getIncrement());
+		out.print(")");
+		writeBlock(indent, term.getBody());
+		out.println();
+	}
+
+	private void writeForVariableDeclaration(JavaFile.VariableDeclaration term) {
+		writeType(term.getType());
+		out.print(" ");
+		out.print(term.getName());
+		if (term.getInitialiser() != null) {
+			out.print(" = ");
+			writeExpression(term.getInitialiser());
+		}
+		out.print(";");
 	}
 
 	private void writeIf(int indent, JavaFile.If term) {
@@ -269,7 +291,9 @@ public class JavaFileWriter {
 	}
 
 	private void writeExpression(JavaFile.Term term) {
-		if(term instanceof JavaFile.ArrayAccess) {
+		if(term instanceof JavaFile.Assignment) {
+			writeAssignment((JavaFile.Assignment) term);
+		} else if(term instanceof JavaFile.ArrayAccess) {
 			writeArrayAccess((JavaFile.ArrayAccess) term);
 		} else if(term instanceof JavaFile.Cast) {
 			writeCast((JavaFile.Cast) term);
@@ -294,6 +318,12 @@ public class JavaFileWriter {
 		} else {
 			throw new IllegalArgumentException("unknown term encountered: " + term);
 		}
+	}
+
+	private void writeAssignment(JavaFile.Assignment term) {
+		writeExpression(term.getLefthandSide());
+		out.print(" = ");
+		writeExpression(term.getRighthandSide());
 	}
 
 	private void writeArrayAccess(JavaFile.ArrayAccess term) {
