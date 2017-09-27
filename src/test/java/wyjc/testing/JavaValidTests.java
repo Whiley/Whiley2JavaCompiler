@@ -32,9 +32,18 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaCompiler.CompilationTask;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
 
 import org.junit.*;
 import org.junit.runner.RunWith;
@@ -155,7 +164,7 @@ public class JavaValidTests {
 			fail("Test failed to compile!");
 		}
 		// compile the generated Java Program.
-		if (compileJava2Bytecode(WHILEY_SRC_DIR, name + ".java") == null) {
+		if (!compileJava2Bytecode(WHILEY_SRC_DIR, name + ".java")) {
 			fail("unable to compile Java file");
 		} else {
 			// execute the generated Java Program.
@@ -204,35 +213,29 @@ public class JavaValidTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static String compileJava2Bytecode(String whileydir, String javaFilename) throws IOException {
+	public static boolean compileJava2Bytecode(String whileydir, String javaFilename) throws IOException {
 		try {
-			whileydir = whileydir.replace('/', File.separatorChar);
-			String tmp = "javac " + javaFilename;
-			Process p = Runtime.getRuntime().exec(tmp, null, new File(whileydir));
-
-			StringBuffer syserr = new StringBuffer();
-			StringBuffer sysout = new StringBuffer();
-			new TestUtils.StreamGrabber(p.getErrorStream(), syserr);
-			new TestUtils.StreamGrabber(p.getInputStream(), sysout);
-			int exitCode = p.waitFor();
-			System.out.println(sysout.toString());
-			if (exitCode != 0) {
-				System.err
-						.println("============================================================");
-				System.err.println(javaFilename);
-				System.err
-						.println("============================================================");
-				System.err.println(syserr);
-				return null;
+			// Make use of java compiler API
+			final JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+			final DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+			final StandardJavaFileManager manager = compiler.getStandardFileManager(diagnostics, null, null);
+			final File file = new File(whileydir + File.separatorChar + javaFilename);
+			final Iterable<? extends JavaFileObject> sources = manager.getJavaFileObjectsFromFiles(Arrays.asList(file));
+			final CompilationTask task = compiler.getTask(null, manager, diagnostics, null, null, sources);
+			if (task.call()) {
+				return true;
 			} else {
-				return sysout.toString();
+				for (final Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
+					System.out.format("%s, line %d in %s\n", diagnostic.getMessage(null), diagnostic.getLineNumber(),
+							diagnostic.getSource().getName());
+				}
 			}
 		} catch (Exception ex) {
 			ex.printStackTrace();
 			fail("Problem running compiled test");
 		}
 
-		return null;
+		return false;
 	}
 
 	/**
@@ -258,7 +261,7 @@ public class JavaValidTests {
 			classPath = classPath.replace('/', File.separatorChar);
 			classPath = classPath.replace(':', File.pathSeparatorChar);
 			srcDir = srcDir.replace('/', File.separatorChar);
-			String tmp = "java -cp " + classPath + " " + className;
+			String tmp = "java -ea -cp " + classPath + " " + className;
 			for (String arg : args) {
 				tmp += " " + arg;
 			}
