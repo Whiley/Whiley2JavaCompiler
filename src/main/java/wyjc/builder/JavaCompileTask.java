@@ -49,10 +49,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	 */
 	private Logger logger = Logger.NULL;
 
-	/**
-	 * The set of names for all anonymous structs and unions encountered.
-	 */
-	private HashMap<Type, JavaFile.Class> unnamedTypes;
+	private ArrayList<Pair<Type,Type>> coercions;
 
 	public JavaCompileTask(Build.Project project) {
 		this.project = project;
@@ -107,8 +104,8 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	private JavaFile build(Path.Entry<WhileyFile> source, Path.Entry<JavaFile> target) throws IOException {
 		// Read the source file, which forces it to be parsed, etc.
 		WhileyFile wf = source.read();
-		// Reset the list of unnamed types
-		unnamedTypes = new HashMap<>();
+		// Reset the list of coercions
+		coercions = new ArrayList<>();
 		// Create an (empty) output file to contains the generated Java source
 		// code.
 		JavaFile jf = new JavaFile(target);
@@ -119,6 +116,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		jf.getDeclarations().add(new JavaFile.Import("java", "math", "BigInteger"));
 		jf.getDeclarations().add(new JavaFile.Import("java", "util", "Arrays"));
 		jf.getDeclarations().add(new JavaFile.Import("java", "util", "function", "Function"));
+		jf.getDeclarations().add(new JavaFile.Import("wyjc", "runtime", "Struct"));
 
 		String className = wf.getEntry().id().last();
 		JavaFile.Class jcd = new JavaFile.Class(className);
@@ -126,11 +124,8 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		jcd.getModifiers().add(JavaFile.Modifier.FINAL);
 		// Translate all declarations
 		visitWhileyFile(wf,jcd);
-		// Add all generated unnamed types
-		for (Map.Entry<Type, JavaFile.Class> e : unnamedTypes.entrySet()) {
-			jcd.getDeclarations().add(e.getValue());
-		}
-		//
+		// Add all required coercions
+		translateCoercions(coercions, jcd);
 		jf.getDeclarations().add(jcd);
 		return jf;
 	}
@@ -138,7 +133,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	@Override
 	public JavaFile.Term visitDeclaration(Decl decl, JavaFile.Class parent) {
 		JavaFile.Declaration jDecl = (JavaFile.Declaration) super.visitDeclaration(decl, parent);
-		if(jDecl != null) {
+		if (jDecl != null) {
 			parent.getDeclarations().add(jDecl);
 		}
 		return null;
@@ -160,23 +155,8 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	@Override
 	public JavaFile.Declaration visitType(Decl.Type decl, JavaFile.Class parent) {
 		Type type = decl.getType();
-
-		if (type instanceof Type.Record) {
-			//
-			List<JavaFile.Field> fields = visitFieldDeclarations((Type.Record) type);
-			JavaFile.Class struct = JavaCodeGenerator.generateStruct(decl.getName().toString(), fields);
-			struct.getModifiers().addAll(translateModifiers(decl.getModifiers()));
-			return struct;
-		} else if (type instanceof Type.Union) {
-			Type.Union ut = (Type.Union) type;
-			JavaFile.Type[] bounds = visitTypes(ut.toArray(Type.class));
-			JavaFile.Class union = JavaCodeGenerator.generateUnion(decl.getName().toString(), bounds);
-			union.getModifiers().addAll(translateModifiers(decl.getModifiers()));
-			return union;
-		} else {
-			// FIXME: deal with Nominal types ?
-			return null;
-		}
+		// Type aliases do not exist in Java. Instead, we have only their type invariants.
+		return null;
 	}
 
 	@Override
@@ -210,13 +190,11 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	@Override
 	public JavaFile.Term visitVariable(Decl.Variable stmt, JavaFile.Class parent) {
-		JavaFile.Type type = visitType(stmt.getType(),parent);
+		JavaFile.Type type = visitType(stmt.getType(), parent);
 		JavaFile.Term initialiser = null;
 		if (stmt.hasInitialiser()) {
 			initialiser = visitExpression(stmt.getInitialiser(), parent);
 		}
-		// FIXME: potential for mismatch between Whiley identifiers and Java
-		// identifiers.
 		return new JavaFile.VariableDeclaration(type, stmt.getName().get(), initialiser);
 	}
 
@@ -238,12 +216,16 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	@Override
 	public JavaFile.Term visitAssign(Stmt.Assign stmt, JavaFile.Class parent) {
-		List<JavaFile.Term> lhs = visitLVals((Tuple) stmt.getLeftHandSide());
-		List<JavaFile.Term> rhs = visitExpressions(stmt.getRightHandSide());
-		if (lhs.size() > 1) {
-			throw new IllegalArgumentException("Need support for multiple assignments");
+		Tuple<LVal> lvals = stmt.getLeftHandSide();
+		List<JavaFile.Term> rvals = visitExpressions(stmt.getRightHandSide());
+		JavaFile.Block block = new JavaFile.Block();
+		for (int i = 0; i != lvals.size(); ++i) {
+			block.getTerms().add(visitLVal(lvals.get(i), rvals.get(i)));
+		}
+		if(block.getTerms().size() == 1) {
+			return block.getTerms().get(0);
 		} else {
-			return new JavaFile.Assignment(lhs.get(0), rhs.get(0));
+			return block;
 		}
 	}
 
@@ -367,48 +349,32 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		return new JavaFile.While(condition, body);
 	}
 
-	// private JavaFile.Term[] visitExpressions(Tuple<Expr> expr) {
-	// JavaFile.Term[] terms = new JavaFile.Term[expr.size()];
-	// for (int i = 0; i != terms.length; ++i) {
-	// terms[i] = visitExpression(expr.get(i));
-	// }
-	// return terms;
-	// }
-
-	private List<JavaFile.Term> visitLVals(Tuple<LVal> exprs) {
-		List<JavaFile.Term> arguments = new ArrayList<>();
-		for (int i = 0; i != exprs.size(); ++i) {
-			arguments.add(visitLVal(exprs.get(i)));
-		}
-		return arguments;
-	}
-
-	private JavaFile.Term visitLVal(LVal lval) {
+	private JavaFile.Term visitLVal(LVal lval, JavaFile.Term rval) {
 		if(lval instanceof Expr.VariableAccess) {
-			return visitVariableLVal((Expr.VariableAccess) lval);
+			return visitVariableLVal((Expr.VariableAccess) lval, rval);
 		} else if(lval instanceof Expr.RecordAccess) {
-			return visitRecordLVal((Expr.RecordAccess) lval);
+			return visitRecordLVal((Expr.RecordAccess) lval, rval);
 		} else if(lval instanceof Expr.ArrayAccess) {
-			return visitArrayLVal((Expr.ArrayAccess) lval);
+			return visitArrayLVal((Expr.ArrayAccess) lval, rval);
 		} else {
 			return visitExpression(lval, null);
 		}
 	}
 
-	private JavaFile.Term visitVariableLVal(Expr.VariableAccess lval) {
+	private JavaFile.Term visitVariableLVal(Expr.VariableAccess lval, JavaFile.Term rval) {
 		Decl.Variable vd = lval.getVariableDeclaration();
-		return new JavaFile.VariableAccess(vd.getName().toString());
+		return new JavaFile.Assignment(new JavaFile.VariableAccess(vd.getName().toString()), rval);
 	}
 
-	private JavaFile.Term visitRecordLVal(Expr.RecordAccess lval) {
-		JavaFile.Term source = visitLVal((LVal) lval.getOperand());
-		return new JavaFile.FieldAccess(source, lval.getField().toString());
+	private JavaFile.Term visitRecordLVal(Expr.RecordAccess lval, JavaFile.Term rval) {
+		JavaFile.Term src = visitExpression(lval.getOperand(), null);
+		return new JavaFile.Invoke(src, "put", new JavaFile.Constant(lval.getField().toString()), rval);
 	}
 
-	private JavaFile.Term visitArrayLVal(Expr.ArrayAccess lval) {
-		JavaFile.Term src = visitLVal((LVal) lval.getFirstOperand());
+	private JavaFile.Term visitArrayLVal(Expr.ArrayAccess lval, JavaFile.Term rval) {
+		JavaFile.Term src = visitExpression(lval.getFirstOperand(), null);
 		JavaFile.Term index = visitExpression(lval.getSecondOperand(), null);
-		return new JavaFile.ArrayAccess(src, toInt(index, Type.Int));
+		return new JavaFile.Assignment(new JavaFile.ArrayAccess(src, toInt(index, Type.Int)),rval);
 	}
 
 	private List<JavaFile.Term> visitExpressions(Tuple<Expr> exprs) {
@@ -490,9 +456,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	@Override
 	public JavaFile.Term visitCast(Expr.Cast expr, JavaFile.Class parent) {
-		JavaFile.Type jType = visitType(expr.getType(), parent);
-		JavaFile.Term jExpr = visitExpression(expr.getOperand(), parent);
-		return new JavaFile.Cast(jType, jExpr);
+		return registerCoercion(expr.getType(),expr.getOperand(), parent);
 	}
 
 	@Override
@@ -543,7 +507,9 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	@Override
 	public JavaFile.Term visitRecordAccess(Expr.RecordAccess expr, JavaFile.Class parent) {
 		JavaFile.Term source = visitExpression(expr.getOperand(), parent);
-		return new JavaFile.FieldAccess(source, expr.getField().toString());
+		// FIXME: this is automatically assuming an indirect look up. In fact, can
+		// perform a direct look up in some cases.
+		return new JavaFile.Invoke(source, "get", new JavaFile.Constant(expr.getField().toString()));
 	}
 
 	@Override
@@ -699,26 +665,15 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	@Override
 	public JavaFile.Term visitRecordInitialiser(Expr.RecordInitialiser expr, JavaFile.Class parent) {
 		Type type = expr.getType(); // declared type (if applicable)
-		JavaFile.Reference jType;
-		//
-		if (type instanceof Type.Nominal) {
-			Type.Nominal nt = (Type.Nominal) type;
-			// FIXME: this is surely broken
-			jType = new JavaFile.Reference(nt.getName().toNameID().name());
-		} else if (type instanceof Type.Record) {
-			JavaFile.Class unnamedStruct = generateAnonymousStruct((Type.Record) type);
-			jType = new JavaFile.Reference(unnamedStruct.getName());
-		} else {
-			throw new IllegalArgumentException("Not sure what to do here");
-		}
 		// Construct the appropriate record now
 		Tuple<Expr> operands = expr.getOperands();
 		ArrayList<JavaFile.Term> parameters = new ArrayList<>();
+		parameters.add(translateRecordSchema(type));
 		for (int i = 0; i != operands.size(); ++i) {
 			Expr operand = operands.get(i);
 			parameters.add(visitExpression(operand,parent));
 		}
-		return new JavaFile.New(jType, parameters);
+		return new JavaFile.New(WHILEY_RECORD, parameters);
 	}
 
 	@Override
@@ -734,7 +689,6 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		// JvmFileWriter is responsible for dealing with it.
 		return new JavaFile.Constant(false);
 	}
-
 
 	@Override
 	public JavaFile.Term visitVariableAccess(Expr.VariableAccess expr, JavaFile.Class parent) {
@@ -797,11 +751,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	public JavaFile.Type visitNominal(Type.Nominal type, JavaFile.Class parent) {
 		try {
 			Decl.Type decl = typeSystem.resolveExactly(type.getName(), Decl.Type.class);
-			if (decl.getType() instanceof Type.Record) {
-				return new JavaFile.Reference(type.getName().toString());
-			} else {
-				return visitType(decl.getType(), parent);
-			}
+			return visitType(decl.getType(), parent);
 		} catch (NameResolver.ResolutionError e) {
 			throw new RuntimeException(e);
 		}
@@ -809,8 +759,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	@Override
 	public JavaFile.Type visitRecord(Type.Record type, JavaFile.Class parent) {
-		JavaFile.Class struct = generateAnonymousStruct((Type.Record) type);
-		return new JavaFile.Reference(struct.getName());
+		return WHILEY_RECORD;
 	}
 
 	@Override
@@ -836,6 +785,30 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	// ===================================================================================
 	// Translation Helpers
 	// ===================================================================================
+
+	private JavaFile.Term translateRecordSchema(Type type) {
+		if (type instanceof Type.Nominal) {
+			try {
+				Type.Nominal nom = (Type.Nominal) type;
+				Decl.Type decl = typeSystem.resolveExactly(nom.getName(), Decl.Type.class);
+				return translateRecordSchema(decl.getType());
+			} catch (NameResolver.ResolutionError e) {
+				throw new RuntimeException(e);
+			}
+		} else {
+			// Must be a record.
+			Type.Record rec = (Type.Record) type;
+			Tuple<Decl.Variable> fields = rec.getFields();
+			StringBuilder builder = new StringBuilder();
+			for (int i = 0; i != fields.size(); ++i) {
+				if (i != 0) {
+					builder.append(",");
+				}
+				builder.append(fields.get(i).getName().toString());
+			}
+			return new JavaFile.Constant(builder.toString());
+		}
+	}
 
 	private JavaFile.Term translateOperator(JavaFile.Operator.Kind kind, Tuple<Expr> operands) {
 		JavaFile.Term[] jOperands = new JavaFile.Term[operands.size()];
@@ -928,14 +901,102 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		}
 	}
 
-	private JavaFile.Class generateAnonymousStruct(Type.Record type) {
-		JavaFile.Class r = unnamedTypes.get(type);
-		if (r == null) {
-			List<JavaFile.Field> fields = visitFieldDeclarations(type);
-			r = JavaCodeGenerator.generateStruct("Struct" + unnamedTypes.size(), fields);
-			unnamedTypes.put(type, r);
+	private JavaFile.Term registerCoercion(Type target, Expr operand, JavaFile.Class parent) {
+		Type source = operand.getType();
+		JavaFile.Term jTerm = visitExpression(operand, parent);
+		//
+		Pair<Type, Type> coercion = new Pair<>(target, source);
+		// First, determine whether an identical coercion already exists.
+		for (int i = 0; i != coercions.size(); ++i) {
+			if (coercions.get(i).equals(coercion)) {
+				String name = "coercion" + i;
+				return new JavaFile.Invoke(null, name, jTerm);
+			}
 		}
-		return r;
+		// At this point, a coercion for this particular pair of types does not yet
+		// exist. Therefore, we register a new one.
+		String name = "coercion" + coercions.size();
+		coercions.add(coercion);
+		// Done
+		return new JavaFile.Invoke(null, name, jTerm);
+	}
+
+	/**
+	 * Translate all the coercions registered for this Java file.
+	 *
+	 * @param coercions
+	 * @param parent
+	 */
+	private void translateCoercions(List<Pair<Type,Type>> coercions, JavaFile.Class parent) {
+		int size = 0;
+		while(size < coercions.size()) {
+			int start = size;
+			size = coercions.size();
+			for(int i=start;i!=size;++i) {
+				Pair<Type,Type> coercion = coercions.get(i);
+				parent.getDeclarations().add(translateCoercion(i, coercion.first(),coercion.second()));
+			}
+		}
+	}
+
+	private JavaFile.Method translateCoercion(int id, Type target, Type source) {
+		String name = "coercion" + id;
+		JavaFile.Type jTarget = visitType(target, null);
+		JavaFile.Type jSource = visitType(source, null);
+		// Construct coercion method
+		JavaFile.Method method = new JavaFile.Method(name, jTarget);
+		method.getParameters().add(new JavaFile.VariableDeclaration(jSource, "var"));
+		method.getModifiers().add(JavaFile.Modifier.PRIVATE);
+		method.getModifiers().add(JavaFile.Modifier.STATIC);
+		JavaFile.Block body = new JavaFile.Block();
+		method.setBody(body);
+		//
+		body.getTerms().add(new JavaFile.Return(translateCoercionBody(target, source)));
+		return method;
+	}
+
+	private JavaFile.Term translateCoercionBody(Type target, Type source) {
+		// First, handle the non-symmetric cases. That is coercions between types of
+		// different kinds (e.g. record -> union)
+		if (target instanceof Type.Nominal) {
+			return translateNominalUnknownCoercion((Type.Nominal) target, source);
+		} else if (source instanceof Type.Nominal) {
+			return translateUnknownNominalCoercion(target, (Type.Nominal) source);
+		}
+		// Second, handle symmetric cases. That is coercions between types of the same
+		// kinds (e.g. record -> record).
+		throw new IllegalArgumentException("invalid coercion target");
+	}
+
+	private JavaFile.Term translateNominalUnknownCoercion(Type.Nominal target, Type source) {
+		try {
+			Decl.Type decl = typeSystem.resolveExactly(target.getName(), Decl.Type.class);
+			return translateCoercionBody(decl.getType(), source);
+		} catch (ResolutionError e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private JavaFile.Term translateUnknownNominalCoercion(Type target, Type.Nominal source) {
+		try {
+			Decl.Type decl = typeSystem.resolveExactly(source.getName(), Decl.Type.class);
+			return translateCoercionBody(target, decl.getType());
+		} catch (ResolutionError e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private JavaFile.Term translateRecordRecordCoercion(Type.Record target, Type.Record source) {
+		// Translate field initialisers
+		JavaFile.VariableAccess var = new JavaFile.VariableAccess("var");
+		ArrayList<JavaFile.Term> initialisers = new ArrayList<>();
+		Tuple<Decl.Variable> fields = target.getFields();
+		for (int i = 0; i != fields.size(); ++i) {
+			Decl.Variable field = fields.get(i);
+			initialisers.add(new JavaFile.FieldAccess(var, field.getName().get()));
+		}
+		// Done
+		return new JavaFile.New(WHILEY_RECORD, initialisers);
 	}
 
 	private List<JavaFile.Field> visitFieldDeclarations(Type.Record type) {
@@ -974,6 +1035,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	}
 	private static JavaFile.Reference JAVA_MATH_BIGINTEGER = new JavaFile.Reference("BigInteger");
 	private static JavaFile.Reference JAVA_LANG_OBJECT = new JavaFile.Reference("Object");
+	private static final JavaFile.Reference WHILEY_RECORD = new JavaFile.Reference("Struct");
 
 	/**
 	 * Convert a given term which returns a value of integer type into a Java int.

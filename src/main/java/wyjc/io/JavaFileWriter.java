@@ -143,6 +143,9 @@ public class JavaFileWriter {
 			writeIf(indent,(JavaFile.If) term);
 		} else if(term instanceof JavaFile.IfElse) {
 			writeIfElse(indent,(JavaFile.IfElse) term);
+		} else if(term instanceof JavaFile.Invoke) {
+			writeInvoke((JavaFile.Invoke) term);
+			out.println(";");
 		} else if(term instanceof JavaFile.Return) {
 			writeReturn(indent,(JavaFile.Return) term);
 		} else if(term instanceof JavaFile.VariableDeclaration) {
