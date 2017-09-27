@@ -14,7 +14,10 @@ import wybs.lang.Build;
 import wybs.lang.NameID;
 import wybs.lang.NameResolver;
 import wybs.lang.NameResolver.ResolutionError;
+import wybs.util.AbstractCompilationUnit.Tuple;
 import wyc.lang.WhileyFile;
+import wyc.lang.WhileyFile.Decl;
+import wyc.util.AbstractConsumer;
 import wyc.util.AbstractFunction;
 import wybs.lang.Build.Graph;
 import wycc.util.Logger;
@@ -784,12 +787,23 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	private JavaFile.Term translateQuantifier(Expr.Quantifier expr, JavaFile.Class parent) {
 		String name = "block$" + expr.getIndex();
+		// Determine all used variables within the quantifier
+		HashSet<Decl.Variable> usedVariables = new HashSet<>();
+		usedVariableExtractor.visitExpression(expr, usedVariables);
 		// Construct the method in which we will execute this quantifier.
 		JavaFile.Method method = new JavaFile.Method(name, JavaFile.BOOLEAN);
 		method.getModifiers().add(JavaFile.Modifier.STATIC);
 		method.getModifiers().add(JavaFile.Modifier.PRIVATE);
-		List<JavaFile.Term> terms = new ArrayList<>();
+		// Construct appropriate parameters / arguments
+		JavaFile.Term[] arguments = new JavaFile.Term[usedVariables.size()];
+		int argIndex = 0;
+		for(Decl.Variable vd : usedVariables) {
+			JavaFile.Type pt = visitType(vd.getType(), null);
+			method.getParameters().add(new JavaFile.VariableDeclaration(pt, vd.getName().toString(), null));
+			arguments[argIndex++] = new JavaFile.VariableAccess(vd.getName().toString());
+		}
 		// Translate each of the parameters into a for loop
+		List<JavaFile.Term> terms = new ArrayList<>();
 		terms.add(translateQuantifierBody(expr,0,parent));
 		// Add final return statement
 		terms.add(new JavaFile.Return(new JavaFile.Constant(expr instanceof Expr.UniversalQuantifier)));
@@ -797,7 +811,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		method.setBody(new JavaFile.Block(terms));
 		parent.getDeclarations().add(method);
 		// Finally, return an invocation to this
-		return new JavaFile.Invoke(null, name);
+		return new JavaFile.Invoke(null, name, arguments);
 	}
 
 	private JavaFile.Term translateQuantifierBody(Expr.Quantifier expr, int i, JavaFile.Class parent) {
@@ -815,21 +829,55 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 			return new JavaFile.If(condition, trueBranch, null);
 		} else {
 			Decl.Variable parameter = parameters.get(i);
-			JavaFile.Type type = JavaFile.INT;
+			JavaFile.Type type = JAVA_MATH_BIGINTEGER;
 			Expr.ArrayRange range = (Expr.ArrayRange) parameter.getInitialiser();
-			JavaFile.Term start = toInt(visitExpression(range.getFirstOperand(), parent),parameter.getType());
-			JavaFile.Term end = toInt(visitExpression(range.getSecondOperand(), parent),parameter.getType());
+			JavaFile.Term start = visitExpression(range.getFirstOperand(), parent);
+			JavaFile.Term end = visitExpression(range.getSecondOperand(), parent);
 			JavaFile.VariableDeclaration decl = new JavaFile.VariableDeclaration(type, parameter.getName().get(),
 					start);
 			JavaFile.VariableAccess var = new JavaFile.VariableAccess(parameter.getName().get());
-			JavaFile.Term condition = new JavaFile.Operator(JavaFile.Operator.Kind.LT, var, end);
-			JavaFile.Term increment = new JavaFile.Assignment(var,
-					new JavaFile.Operator(JavaFile.Operator.Kind.ADD, var, new JavaFile.Constant(1)));
+			JavaFile.Term condition = new JavaFile.Operator(JavaFile.Operator.Kind.LT,
+					new JavaFile.Invoke(var, "compareTo", end), new JavaFile.Constant(0));
+			JavaFile.Term increment = new JavaFile.Assignment(var, new JavaFile.Invoke(var, "add",
+					new JavaFile.FieldAccess(new JavaFile.VariableAccess("BigInteger"), "ONE")));
 			JavaFile.Block body = new JavaFile.Block();
 			body.getTerms().add(translateQuantifierBody(expr, i + 1, parent));
 			return new JavaFile.For(decl, condition, increment, body);
 		}
 	}
+
+	/**
+	 * Create a simple visitor for extracting all variable access expressions from a
+	 * given expression (or statement).
+	 */
+	private static final AbstractConsumer<HashSet<Decl.Variable>> usedVariableExtractor = new AbstractConsumer<HashSet<Decl.Variable>>() {
+		@Override
+		public void visitVariableAccess(WhileyFile.Expr.VariableAccess expr, HashSet<Decl.Variable> used) {
+			used.add(expr.getVariableDeclaration());
+		}
+		@Override
+		public void visitUniversalQuantifier(WhileyFile.Expr.UniversalQuantifier expr, HashSet<Decl.Variable> used) {
+			visitVariables(expr.getParameters(), used);
+			visitExpression(expr.getOperand(), used);
+			removeAllDeclared(expr.getParameters(),used);
+		}
+		@Override
+		public void visitExistentialQuantifier(WhileyFile.Expr.ExistentialQuantifier expr, HashSet<Decl.Variable> used) {
+			visitVariables(expr.getParameters(), used);
+			visitExpression(expr.getOperand(), used);
+			removeAllDeclared(expr.getParameters(),used);
+		}
+		@Override
+		public void visitType(WhileyFile.Type type, HashSet<Decl.Variable> used) {
+			// No need to visit types
+		}
+
+		private void removeAllDeclared(Tuple<Decl.Variable> parameters, HashSet<Decl.Variable> used) {
+			for (int i = 0; i != parameters.size(); ++i) {
+				used.remove(parameters.get(i));
+			}
+		}
+	};
 
 	private JavaFile.Term translateRecordSchema(Type type) {
 		if (type instanceof Type.Nominal) {
