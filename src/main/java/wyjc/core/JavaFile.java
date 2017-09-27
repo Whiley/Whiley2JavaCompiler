@@ -378,6 +378,36 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class For implements Term {
+		private VariableDeclaration initialiser;
+		private Term condition;
+		private Term increment;
+		private Block body;
+
+		public For(VariableDeclaration initialiser, Term condition, Term increment, Block body) {
+			this.initialiser = initialiser;
+			this.condition = condition;
+			this.increment = increment;
+			this.body = body;
+		}
+
+		public VariableDeclaration getInitialiser() {
+			return initialiser;
+		}
+
+		public Term getCondition() {
+			return condition;
+		}
+
+		public Term getIncrement() {
+			return increment;
+		}
+
+		public Block getBody() {
+			return body;
+		}
+	}
+
 	public static class FieldAccess implements Term {
 		private Term src;
 		private String field;
