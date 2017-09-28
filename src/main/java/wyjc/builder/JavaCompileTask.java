@@ -266,6 +266,11 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	}
 
 	@Override
+	public JavaFile.Term visitFail(Stmt.Fail stmt, JavaFile.Class parent) {
+		return new JavaFile.Throw(new JavaFile.New(new JavaFile.Reference("RuntimeException"), Collections.EMPTY_LIST));
+	}
+
+	@Override
 	public JavaFile.Term visitIfElse(Stmt.IfElse stmt, JavaFile.Class parent) {
 		JavaFile.Term operand = visitExpression(stmt.getCondition(), parent);
 		JavaFile.Block trueBranch = visitBlock(stmt.getTrueBranch(), parent);

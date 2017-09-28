@@ -148,6 +148,8 @@ public class JavaFileWriter {
 		} else if(term instanceof JavaFile.Invoke) {
 			writeInvoke((JavaFile.Invoke) term);
 			out.println(";");
+		} else if(term instanceof JavaFile.Throw) {
+			writeThrow(indent,(JavaFile.Throw) term);
 		} else if(term instanceof JavaFile.Return) {
 			writeReturn(indent,(JavaFile.Return) term);
 		} else if(term instanceof JavaFile.VariableDeclaration) {
@@ -235,6 +237,12 @@ public class JavaFileWriter {
 			writeBlock(indent, cAse.getBlock());
 		}
 		out.println();
+	}
+
+	private void writeThrow(int indent, JavaFile.Throw term) {
+		out.print("throw ");
+		writeExpression(term.getClause());
+		out.println(";");
 	}
 
 	private void writeReturn(int indent, JavaFile.Return term) {

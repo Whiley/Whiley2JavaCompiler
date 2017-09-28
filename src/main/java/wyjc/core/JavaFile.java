@@ -690,6 +690,18 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class Throw implements Term {
+		private JavaFile.Term term;
+
+		public Throw(JavaFile.Term term) {
+			this.term = term;
+		}
+
+		public Term getClause() {
+			return term;
+		}
+	}
+
 	public static class VariableAccess implements Term {
 		private String name;
 
