@@ -767,6 +767,11 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	}
 
 	@Override
+	public JavaFile.Type visitNull(Type.Null type, JavaFile.Class parent) {
+		return JAVA_LANG_OBJECT;
+	}
+
+	@Override
 	public JavaFile.Type visitBool(Type.Bool type, JavaFile.Class parent) {
 		return JavaFile.BOOLEAN;
 	}
@@ -810,7 +815,37 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	@Override
 	public JavaFile.Type visitUnion(Type.Union type, JavaFile.Class parent) {
-		return JAVA_LANG_OBJECT;
+		JavaFile.Type result = null;
+		for(int i=0;i!=type.size();++i) {
+			JavaFile.Type next = visitType(type.get(i),parent);
+			result = union(result,next);
+		}
+		return result;
+	}
+
+	/**
+	 * Attempt to combine two Java types together. This is important to ensure we
+	 * get the most precise resulting type. For example, combining
+	 * <code>Object[]</code> and <code>Object[]</code> should give
+	 * <code>Object[]</code>. But, for example, <code>BigInteger</code> and
+	 * <code>Object[]</code> should given <code>Object</code>.
+	 *
+	 * @param lhs
+	 * @param rhs
+	 * @return
+	 */
+	private JavaFile.Type union(JavaFile.Type lhs, JavaFile.Type rhs) {
+		if (lhs == null) {
+			return rhs;
+		} else if (lhs.equals(rhs)) {
+			return lhs;
+		} else if (lhs instanceof JavaFile.Array && rhs instanceof JavaFile.Array) {
+			JavaFile.Array la = (JavaFile.Array) lhs;
+			JavaFile.Array ra = (JavaFile.Array) rhs;
+			return new JavaFile.Array(union(la.getElement(), ra.getElement()));
+		} else {
+			return JAVA_LANG_OBJECT;
+		}
 	}
 
 	private JavaFile.Type[] visitTypes(Type... types) {
