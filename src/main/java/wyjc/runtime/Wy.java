@@ -16,7 +16,7 @@ public class Wy {
 	}
 
 	public static boolean equals(Object lhs, Object rhs) {
-		return lhs.equals(rhs);
+		return lhs == rhs || (lhs != null && lhs.equals(rhs));
 	}
 
 	public static boolean equals(boolean[] lhs, boolean[] rhs) {

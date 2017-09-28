@@ -297,7 +297,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	@Override
 	public JavaFile.Term visitSkip(Stmt.Skip stmt, JavaFile.Class parent) {
-		return new JavaFile.Invoke(null, new String[] {"Wy", "skip"});
+		return new JavaFile.Invoke(null, new String[] { "Wy", "skip" });
 	}
 
 	@Override
@@ -418,7 +418,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		JavaFile.Term src = visitExpression(expr.getFirstOperand(), parent);
 		JavaFile.Term index = visitExpression(expr.getSecondOperand(), parent);
 		JavaFile.Term t = new JavaFile.ArrayAccess(src, toInt(index, Type.Int));
-		if(!expr.isMove()) {
+		if (!expr.isMove()) {
 			t = translateClone(t, expr.getType());
 		}
 		return t;
@@ -428,7 +428,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	public JavaFile.Term visitArrayGenerator(Expr.ArrayGenerator expr, JavaFile.Class parent) {
 		JavaFile.Term value = visitExpression(expr.getFirstOperand(), parent);
 		JavaFile.Term length = visitExpression(expr.getSecondOperand(), parent);
-		return new JavaFile.Invoke(null, new String[] {"Wy", "array"}, value, length);
+		return new JavaFile.Invoke(null, new String[] { "Wy", "array" }, value, length);
 	}
 
 	@Override
@@ -545,12 +545,12 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	@Override
 	public JavaFile.Term visitRecordAccess(Expr.RecordAccess expr, JavaFile.Class parent) {
 		JavaFile.Term source = visitExpression(expr.getOperand(), parent);
-		JavaFile.Type type = visitType(expr.getType(),parent);
+		JavaFile.Type type = visitType(expr.getType(), parent);
 		// FIXME: this is automatically assuming an indirect look up. In fact, can
 		// perform a direct look up in some cases.
 		JavaFile.Term t = new JavaFile.Invoke(new JavaFile.Type[] { type }, source, "get",
 				new JavaFile.Constant(expr.getField().toString()));
-		if(!expr.isMove()) {
+		if (!expr.isMove()) {
 			t = translateClone(t, expr.getType());
 		}
 		return t;
@@ -678,7 +678,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	@Override
 	public JavaFile.Term visitIs(Expr.Is expr, JavaFile.Class parent) {
-		return new JavaFile.Constant(false);
+		return translateTypeTest(expr, parent);
 	}
 
 	@Override
@@ -816,9 +816,9 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	@Override
 	public JavaFile.Type visitUnion(Type.Union type, JavaFile.Class parent) {
 		JavaFile.Type result = null;
-		for(int i=0;i!=type.size();++i) {
-			JavaFile.Type next = visitType(type.get(i),parent);
-			result = union(result,next);
+		for (int i = 0; i != type.size(); ++i) {
+			JavaFile.Type next = visitType(type.get(i), parent);
+			result = union(result, next);
 		}
 		return result;
 	}
@@ -934,9 +934,97 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	// Translation Helpers
 	// ===================================================================================
 
+	/**
+	 * <p>
+	 * Translate a type test expression. This is a complex procedure which may need
+	 * to recursively explore the value being tested. Initially, it will employ an
+	 * inline test whereever possible. For example, consider this case:
+	 * </p>
+	 *
+	 * <pre>
+	 * function f(int|null x) -> (int r):
+	 *    if x is int:
+	 *       ...
+	 * </pre>
+	 *
+	 * <p>
+	 * Here, we can translate <code>x is int</code> into
+	 * <code>x instanceof BigInteger</code>. However, not all tests can be
+	 * translated inline. For example, consider this test:
+	 * </p>
+	 *
+	 * <pre>
+	 * function f(any[] xs) -> (int r):
+	 *     if xs is int[]:
+	 *        ...
+	 * </pre>
+	 *
+	 * <p>
+	 * This necessarily requires iterating every element of <code>xs</code> to check
+	 * whether or not it's a BigInteger. This test translates into
+	 * <code>isType$ia(xs)</code>, defined as:
+	 * </p>
+	 *
+	 * <pre>
+	 * private static boolean isType$ia(Object[] xs) {
+	 * 	for (int i = 0; i != xs.length; ++i) {
+	 * 		if (!xs[i] instanceof BigInteger) {
+	 * 			return false;
+	 * 		}
+	 * 	}
+	 * 	return true;
+	 * }
+	 * </pre>
+	 * <p>
+	 * Observe that there are optimisations which can be employed. For example,
+	 * consider this case:
+	 * </p>
+	 *
+	 * <pre>
+	 * function f(int|(int[]) xs) -> (int r):
+	 *     if xs is int[]:
+	 *        ...
+	 * </pre>
+	 * <p>
+	 * Here, we can translate the test into <code>!(xs instanceof BigInteger)</code>
+	 * based on the type information we have available.
+	 * </p>
+	 *
+	 * @param expr
+	 * @param parent
+	 * @return
+	 */
+	private JavaFile.Term translateTypeTest(Expr.Is expr, JavaFile.Class parent) {
+		JavaFile.Term src = visitExpression(expr.getOperand(), parent);
+		Type type = expr.getTestType();
+		// First, attempt inline translation (if possible)
+		switch (type.getOpcode()) {
+		case TYPE_null:
+			// Translate "x is null" as "x == null" in Java.
+			return new JavaFile.Operator(JavaFile.Operator.Kind.EQ, src, new JavaFile.Constant(null));
+		case TYPE_bool:
+			return new JavaFile.InstanceOf(src, JAVA_LANG_BOOLEAN);
+		case TYPE_byte:
+			return new JavaFile.InstanceOf(src, JAVA_LANG_BYTE);
+		case TYPE_int:
+			return new JavaFile.InstanceOf(src, JAVA_MATH_BIGINTEGER);
+		}
+		// At this point, we need a more complex translation.
+		throw new IllegalArgumentException("IMPLEMENT TYPE TESTS");
+	}
+
+	/**
+	 * Clone the result of a given term, though do this only as necessary. For
+	 * example, primitive types never need to be cloned. Likewise, BigInteger is
+	 * immutable and doesn't need to be cloned either.
+	 *
+	 * @param t
+	 * @param type
+	 * @return
+	 */
 	private JavaFile.Term translateClone(JavaFile.Term t, Type type) {
 		if (!isCopyable(type)) {
-			return new JavaFile.Invoke(null, new String[] {"Wy","clone"}, t);
+			return new JavaFile.Invoke(null, new String[] { "Wy", "clone" }, t);
 		} else {
 			return t;
 		}
@@ -1301,6 +1389,8 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	private static JavaFile.Array JAVA_LANG_STRING_ARRAY = new JavaFile.Array(new JavaFile.Reference("String"));
 	private static JavaFile.Reference JAVA_MATH_BIGINTEGER = new JavaFile.Reference("BigInteger");
 	private static JavaFile.Reference JAVA_LANG_OBJECT = new JavaFile.Reference("Object");
+	private static JavaFile.Reference JAVA_LANG_BOOLEAN = new JavaFile.Reference("Boolean");
+	private static JavaFile.Reference JAVA_LANG_BYTE = new JavaFile.Reference("Byte");
 	private static final JavaFile.Reference WHILEY_RECORD = new JavaFile.Reference("Wy", "Struct");
 
 	/**
