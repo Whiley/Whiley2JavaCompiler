@@ -291,6 +291,11 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	}
 
 	@Override
+	public JavaFile.Term visitSkip(Stmt.Skip stmt, JavaFile.Class parent) {
+		return new JavaFile.Invoke(null, new String[] {"Wy", "skip"});
+	}
+
+	@Override
 	public JavaFile.Term visitSwitch(Stmt.Switch stmt, JavaFile.Class parent) {
 		Tuple<Stmt.Case> cases = stmt.getCases();
 		JavaFile.Term[][] groups = new JavaFile.Term[cases.size()][];
@@ -407,7 +412,11 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	public JavaFile.Term visitArrayAccess(Expr.ArrayAccess expr, JavaFile.Class parent) {
 		JavaFile.Term src = visitExpression(expr.getFirstOperand(), parent);
 		JavaFile.Term index = visitExpression(expr.getSecondOperand(), parent);
-		return new JavaFile.ArrayAccess(src, toInt(index, Type.Int));
+		JavaFile.Term t = new JavaFile.ArrayAccess(src, toInt(index, Type.Int));
+		if(!expr.isMove()) {
+			t = translateClone(t, expr.getType());
+		}
+		return t;
 	}
 
 	@Override
@@ -529,9 +538,15 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	@Override
 	public JavaFile.Term visitRecordAccess(Expr.RecordAccess expr, JavaFile.Class parent) {
 		JavaFile.Term source = visitExpression(expr.getOperand(), parent);
+		JavaFile.Type type = visitType(expr.getType(),parent);
 		// FIXME: this is automatically assuming an indirect look up. In fact, can
 		// perform a direct look up in some cases.
-		return new JavaFile.Invoke(source, "get", new JavaFile.Constant(expr.getField().toString()));
+		JavaFile.Term t = new JavaFile.Invoke(new JavaFile.Type[] { type }, source, "get",
+				new JavaFile.Constant(expr.getField().toString()));
+		if(!expr.isMove()) {
+			t = translateClone(t, expr.getType());
+		}
+		return t;
 	}
 
 	@Override
@@ -713,10 +728,10 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		Decl.Variable vd = expr.getVariableDeclaration();
 		JavaFile.Term t = new JavaFile.VariableAccess(vd.getName().toString());
 		JavaFile.Type type = visitType(expr.getType(), parent);
-		if (expr.getOpcode() == EXPR_variablecopy && !isCopyable(expr.getType())) {
+		if (expr.getOpcode() == EXPR_variablecopy) {
 			// Since this type is not copyable, we need to clone it to ensure
 			// that ownership is properly preserved.
-			t = new JavaFile.Invoke(t, "clone");
+			t = translateClone(t, expr.getType());
 		}
 		return t;
 	}
@@ -806,7 +821,9 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	/**
 	 * The main launcher is responsible for invoking the Java main(String[])
 	 * function. The launcher is only added if there is an exported public method
-	 * main which accepts the arguments ascii::string[].
+	 * "main" which accepts the arguments ascii::string[]. The main launcher is then
+	 * responsible for converting the Java String arguments into appropriate
+	 * arguments for the Whiley main method.
 	 *
 	 * @param jcs
 	 * @param wf
@@ -823,13 +840,22 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 			JavaFile.VariableDeclaration args = new JavaFile.VariableDeclaration(JAVA_LANG_STRING_ARRAY, "args");
 			meth.getParameters().add(args);
 			ArrayList<JavaFile.Term> body = new ArrayList<>();
-			JavaFile.Term conversion = new JavaFile.Invoke(null,new String[] {"Wy","toAsciiStrings"},new JavaFile.VariableAccess("args"));
+			JavaFile.Term conversion = new JavaFile.Invoke(null, new String[] { "Wy", "toAsciiStrings" },
+					new JavaFile.VariableAccess("args"));
 			body.add(new JavaFile.Invoke(null, "main", conversion));
 			meth.setBody(new JavaFile.Block(body));
 			jcs.getDeclarations().add(meth);
 		}
 	}
 
+	/**
+	 * Search through all declarations in the given Whiley file looking for a method
+	 * which is public and exported, called "main" and has the appropriate argument
+	 * types.
+	 *
+	 * @param wf
+	 * @return
+	 */
 	private Decl.Method findMainMethod(WhileyFile wf) {
 		Tuple<Decl> declarations = wf.getDeclarations();
 		for (int i = 0; i != declarations.size(); ++i) {
@@ -865,6 +891,14 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	// ===================================================================================
 	// Translation Helpers
 	// ===================================================================================
+
+	private JavaFile.Term translateClone(JavaFile.Term t, Type type) {
+		if (!isCopyable(type)) {
+			return new JavaFile.Invoke(null, new String[] {"Wy","clone"}, t);
+		} else {
+			return t;
+		}
+	}
 
 	private JavaFile.Term translateQuantifier(Expr.Quantifier expr, JavaFile.Class parent) {
 		String name = "block$" + expr.getIndex();
@@ -1083,20 +1117,29 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		Type source = operand.getType();
 		JavaFile.Term jTerm = visitExpression(operand, parent);
 		//
-		Pair<Type, Type> coercion = new Pair<>(target, source);
-		// First, determine whether an identical coercion already exists.
-		for (int i = 0; i != coercions.size(); ++i) {
-			if (coercions.get(i).equals(coercion)) {
-				String name = "coercion" + i;
-				return new JavaFile.Invoke(null, name, jTerm);
+		if (isApplicableCoercion(target, source)) {
+			Pair<Type, Type> coercion = new Pair<>(target, source);
+			// First, determine whether an identical coercion already exists.
+			for (int i = 0; i != coercions.size(); ++i) {
+				if (coercions.get(i).equals(coercion)) {
+					String name = "coercion" + i;
+					return new JavaFile.Invoke(null, name, jTerm);
+				}
 			}
+			// At this point, a coercion for this particular pair of types does not yet
+			// exist. Therefore, we register a new one.
+			String name = "coercion" + coercions.size();
+			coercions.add(coercion);
+			// Done
+			return new JavaFile.Invoke(null, name, jTerm);
+		} else {
+			return jTerm;
 		}
-		// At this point, a coercion for this particular pair of types does not yet
-		// exist. Therefore, we register a new one.
-		String name = "coercion" + coercions.size();
-		coercions.add(coercion);
-		// Done
-		return new JavaFile.Invoke(null, name, jTerm);
+	}
+
+	public boolean isApplicableCoercion(Type target, Type Source) {
+		// FIXME: obviously, there are applicable targets
+		return false;
 	}
 
 	/**

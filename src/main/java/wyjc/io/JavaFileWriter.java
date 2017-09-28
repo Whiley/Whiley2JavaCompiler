@@ -372,9 +372,20 @@ public class JavaFileWriter {
 
 	private void writeInvoke(JavaFile.Invoke term) {
 		JavaFile.Term receiver = term.getReceiver();
+		List<JavaFile.Type> typeArgs = term.getTypeArguments();
 		if(receiver != null) {
 			writeExpression(receiver);
 			out.print(".");
+		}
+		if(typeArgs != null) {
+			out.print("<");
+			for(int i=0;i!=typeArgs.size();++i) {
+				if(i != 0) {
+					out.print(",");
+				}
+				writeType(typeArgs.get(i));
+			}
+			out.print(">");
 		}
 		writePath(term.getPath());
 		out.print("(");

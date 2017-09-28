@@ -499,11 +499,20 @@ public class JavaFile extends AbstractCompilationUnit {
 	}
 
 	public static class Invoke implements Term {
+		private List<Type> typeArguments;
 		private Term receiver;
 		private List<String> path;
 		private List<Term> arguments;
 
 		public Invoke(Term receiver, String name, Term... arguments) {
+			this.receiver = receiver;
+			this.path = new ArrayList<>();
+			this.path.add(name);
+			this.arguments = Arrays.asList(arguments);
+		}
+
+		public Invoke(Type[] typeArgs, Term receiver, String name, Term... arguments) {
+			this.typeArguments = Arrays.asList(typeArgs);
 			this.receiver = receiver;
 			this.path = new ArrayList<>();
 			this.path.add(name);
@@ -528,6 +537,10 @@ public class JavaFile extends AbstractCompilationUnit {
 			this.receiver = receiver;
 			this.path = new ArrayList<>(path);
 			this.arguments = new ArrayList<>(arguments);
+		}
+
+		public List<Type> getTypeArguments() {
+			return typeArguments;
 		}
 
 		public Term getReceiver() {

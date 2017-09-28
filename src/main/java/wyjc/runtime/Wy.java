@@ -10,6 +10,10 @@ import java.util.Arrays;
  *
  */
 public class Wy {
+	public static void skip() {
+		// literally do nothing
+	}
+
 	public static boolean equals(Object lhs, Object rhs) {
 		return lhs.equals(rhs);
 	}
@@ -58,6 +62,42 @@ public class Wy {
 			narg[i] = BigInteger.valueOf(arg.charAt(i));
 		}
 		return narg;
+	}
+
+	public static <T> T clone(T arr) {
+		// FIXME: this is basically a really bad idea.
+		if (arr instanceof Object[]) {
+			return (T) clone((Object[]) arr);
+		} else if (arr instanceof boolean[]) {
+			return (T) clone((boolean[]) arr);
+		} else if (arr instanceof byte[]) {
+			return (T) clone((byte[]) arr);
+		} else if (arr instanceof Struct[]) {
+			return (T) clone((Struct[]) arr);
+		} else if (arr instanceof Struct) {
+			return (T) ((Struct) arr).clone();
+		}
+		return arr;
+	}
+
+	public static boolean[] clone(boolean[] arr) {
+		return arr.clone();
+	}
+
+	public static byte[] clone(byte[] arr) {
+		return arr.clone();
+	}
+
+	public static BigInteger[] clone(BigInteger[] arr) {
+		return arr.clone();
+	}
+
+	public static <T> T[] clone(T[] arr) {
+		arr = arr.clone();
+		for (int i = 0; i != arr.length; ++i) {
+			arr[i] = clone(arr[i]);
+		}
+		return arr;
 	}
 
 	/**
