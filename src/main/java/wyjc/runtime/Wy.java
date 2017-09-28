@@ -1,5 +1,6 @@
 package wyjc.runtime;
 
+import java.lang.reflect.Array;
 import java.math.BigInteger;
 import java.util.Arrays;
 
@@ -35,6 +36,39 @@ public class Wy {
 			System.err.print((char) arr[i].intValue());
 		}
 	}
+
+	public static BigInteger[] array(BigInteger value, BigInteger length) {
+		BigInteger[] array = new BigInteger[length.intValue()];
+		for(int i=0;i!=array.length;++i) {
+			array[i] = value;
+		}
+		return array;
+	}
+
+	public static boolean[] array(boolean value, BigInteger length) {
+		boolean[] array = new boolean[length.intValue()];
+		for(int i=0;i!=array.length;++i) {
+			array[i] = value;
+		}
+		return array;
+	}
+
+	public static byte[] array(byte value, BigInteger length) {
+		byte[] array = new byte[length.intValue()];
+		for(int i=0;i!=array.length;++i) {
+			array[i] = value;
+		}
+		return array;
+	}
+
+	public static <T> T[] array(T value, BigInteger length) {
+		T[] array = (T[]) Array.newInstance(value.getClass(), length.intValue());
+		for(int i=0;i!=array.length;++i) {
+			array[i] = value;
+		}
+		return array;
+	}
+
 
 	/**
 	 * Convert an instance of java.lang.String[] into an instance of ascii:string[].

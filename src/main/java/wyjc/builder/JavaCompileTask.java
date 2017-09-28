@@ -421,7 +421,9 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	@Override
 	public JavaFile.Term visitArrayGenerator(Expr.ArrayGenerator expr, JavaFile.Class parent) {
-		throw new IllegalArgumentException("IMPLEMENT ME");
+		JavaFile.Term value = visitExpression(expr.getFirstOperand(), parent);
+		JavaFile.Term length = visitExpression(expr.getSecondOperand(), parent);
+		return new JavaFile.Invoke(null, new String[] {"Wy", "array"}, value, length);
 	}
 
 	@Override
