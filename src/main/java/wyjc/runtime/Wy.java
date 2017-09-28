@@ -26,6 +26,40 @@ public class Wy {
 		return Arrays.deepEquals(lhs, rhs);
 	}
 
+	public static void debug(BigInteger[] arr) {
+		for(int i=0;i!=arr.length;++i) {
+			System.err.print((char) arr[i].intValue());
+		}
+	}
+
+	/**
+	 * Convert an instance of java.lang.String[] into an instance of ascii:string[].
+	 *
+	 * @param args
+	 * @return
+	 */
+	public static BigInteger[][] toAsciiStrings(String[] args) {
+		BigInteger[][] nargs = new BigInteger[args.length][];
+		for(int i=0;i!=args.length;++i) {
+			nargs[i] = toAsciiString(args[i]);
+		}
+		return nargs;
+	}
+
+	/**
+	 * Convert an instance of java.lang.String into an instance of ascii:string.
+	 *
+	 * @param args
+	 * @return
+	 */
+	public static BigInteger[] toAsciiString(String arg) {
+		BigInteger[] narg = new BigInteger[arg.length()];
+		for(int i=0;i!=narg.length;++i) {
+			narg[i] = BigInteger.valueOf(arg.charAt(i));
+		}
+		return narg;
+	}
+
 	/**
 	 * Provides a uniform representation of records in Whiley on the JVM. It should
 	 * be pretty obvious that this is not particularly efficient. Some points:

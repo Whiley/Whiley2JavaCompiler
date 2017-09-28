@@ -33,7 +33,7 @@ import static wyc.lang.WhileyFile.*;
 import wyjc.core.JavaFile;
 import wyjc.util.JavaCodeGenerator;
 
-public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Term> implements Build.Task {
+public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.Term> implements Build.Task {
 	/**
 	 * The master project for identifying all resources available to the builder.
 	 * This includes all modules declared in the project being verified and/or
@@ -52,7 +52,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	 */
 	private Logger logger = Logger.NULL;
 
-	private ArrayList<Pair<Type,Type>> coercions;
+	private ArrayList<Pair<Type, Type>> coercions;
 
 	public JavaCompileTask(Build.Project project) {
 		this.project = project;
@@ -126,9 +126,12 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		jcd.getModifiers().add(JavaFile.Modifier.PUBLIC);
 		jcd.getModifiers().add(JavaFile.Modifier.FINAL);
 		// Translate all declarations
-		visitWhileyFile(wf,jcd);
+		visitWhileyFile(wf, jcd);
 		// Add all required coercions
 		translateCoercions(coercions, jcd);
+		// Add launcher (if appropriate)
+		addMainLauncher(wf, jcd);
+		// Done
 		jf.getDeclarations().add(jcd);
 		return jf;
 	}
@@ -144,7 +147,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	@Override
 	public JavaFile.Declaration visitStaticVariable(Decl.StaticVariable decl, JavaFile.Class parent) {
-		JavaFile.Type type = visitType(decl.getType(),parent);
+		JavaFile.Type type = visitType(decl.getType(), parent);
 		String name = decl.getName().toString();
 		JavaFile.Term initialiser = null;
 		if (decl.hasInitialiser()) {
@@ -158,7 +161,8 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	@Override
 	public JavaFile.Declaration visitType(Decl.Type decl, JavaFile.Class parent) {
 		Type type = decl.getType();
-		// Type aliases do not exist in Java. Instead, we have only their type invariants.
+		// Type aliases do not exist in Java. Instead, we have only their type
+		// invariants.
 		return null;
 	}
 
@@ -177,7 +181,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		// FIXME: should provide support for checking preconditions /
 		// postconditions here. These can be implemented as runtime checks.
 		//
-		method.setBody(visitBlock(decl.getBody(),parent));
+		method.setBody(visitBlock(decl.getBody(), parent));
 		return method;
 	}
 
@@ -225,29 +229,39 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		for (int i = 0; i != lvals.size(); ++i) {
 			block.getTerms().add(visitLVal(lvals.get(i), rvals.get(i)));
 		}
-		if(block.getTerms().size() == 1) {
+		if (block.getTerms().size() == 1) {
 			return block.getTerms().get(0);
 		} else {
 			return block;
 		}
 	}
 
-	@Override public JavaFile.Term visitAssume(Stmt.Assume stmt, JavaFile.Class parent) {
+	@Override
+	public JavaFile.Term visitAssume(Stmt.Assume stmt, JavaFile.Class parent) {
 		JavaFile.Term operand = visitExpression(stmt.getCondition(), parent);
 		return new JavaFile.Assert(operand);
 	}
 
-	@Override public JavaFile.Term visitBreak(Stmt.Break stmt, JavaFile.Class parent) {
+	@Override
+	public JavaFile.Term visitBreak(Stmt.Break stmt, JavaFile.Class parent) {
 		return new JavaFile.Break();
 	}
 
-	@Override public JavaFile.Term visitContinue(Stmt.Continue stmt, JavaFile.Class parent) {
+	@Override
+	public JavaFile.Term visitContinue(Stmt.Continue stmt, JavaFile.Class parent) {
 		return new JavaFile.Continue();
 	}
 
-	@Override public JavaFile.Term visitDoWhile(Stmt.DoWhile stmt, JavaFile.Class parent) {
+	@Override
+	public JavaFile.Term visitDebug(Stmt.Debug stmt, JavaFile.Class parent) {
+		JavaFile.Term arg = visitExpression(stmt.getOperand(), parent);
+		return new JavaFile.Invoke(null, new String[] { "Wy", "debug" }, arg);
+	}
+
+	@Override
+	public JavaFile.Term visitDoWhile(Stmt.DoWhile stmt, JavaFile.Class parent) {
 		JavaFile.Term condition = visitExpression(stmt.getCondition(), parent);
-		JavaFile.Block body = visitBlock(stmt.getBody(),parent);
+		JavaFile.Block body = visitBlock(stmt.getBody(), parent);
 		return new JavaFile.DoWhile(body, condition);
 	}
 
@@ -337,7 +351,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 				JavaFile.Term t = visitExpression(conditions.get(j), parent);
 				// Convert it into an equality
 				t = new JavaFile.Invoke(new JavaFile.VariableAccess(tmpVar), "equals", t);
-				cas = (j == 0) ? t : new JavaFile.Operator(JavaFile.Operator.Kind.AND, cas, t);
+				cas = (j == 0) ? t : new JavaFile.Operator(JavaFile.Operator.Kind.OR, cas, t);
 			}
 			JavaFile.Block body = visitBlock(c.getBlock(), parent);
 			ifconditions.add(new JavaFile.IfElse.Case(cas, body));
@@ -346,18 +360,19 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		return new JavaFile.Block(stmts);
 	}
 
-	@Override public JavaFile.Term visitWhile(Stmt.While stmt, JavaFile.Class parent) {
+	@Override
+	public JavaFile.Term visitWhile(Stmt.While stmt, JavaFile.Class parent) {
 		JavaFile.Term condition = visitExpression(stmt.getCondition(), parent);
 		JavaFile.Block body = visitBlock(stmt.getBody(), parent);
 		return new JavaFile.While(condition, body);
 	}
 
 	private JavaFile.Term visitLVal(LVal lval, JavaFile.Term rval) {
-		if(lval instanceof Expr.VariableAccess) {
+		if (lval instanceof Expr.VariableAccess) {
 			return visitVariableLVal((Expr.VariableAccess) lval, rval);
-		} else if(lval instanceof Expr.RecordAccess) {
+		} else if (lval instanceof Expr.RecordAccess) {
 			return visitRecordLVal((Expr.RecordAccess) lval, rval);
-		} else if(lval instanceof Expr.ArrayAccess) {
+		} else if (lval instanceof Expr.ArrayAccess) {
 			return visitArrayLVal((Expr.ArrayAccess) lval, rval);
 		} else {
 			return visitExpression(lval, null);
@@ -377,7 +392,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	private JavaFile.Term visitArrayLVal(Expr.ArrayAccess lval, JavaFile.Term rval) {
 		JavaFile.Term src = visitExpression(lval.getFirstOperand(), null);
 		JavaFile.Term index = visitExpression(lval.getSecondOperand(), null);
-		return new JavaFile.Assignment(new JavaFile.ArrayAccess(src, toInt(index, Type.Int)),rval);
+		return new JavaFile.Assignment(new JavaFile.ArrayAccess(src, toInt(index, Type.Int)), rval);
 	}
 
 	private List<JavaFile.Term> visitExpressions(Tuple<Expr> exprs) {
@@ -388,28 +403,32 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		return arguments;
 	}
 
-	@Override public JavaFile.Term visitArrayAccess(Expr.ArrayAccess expr, JavaFile.Class parent) {
-		JavaFile.Term src = visitExpression(expr.getFirstOperand(),parent);
-		JavaFile.Term index = visitExpression(expr.getSecondOperand(),parent);
+	@Override
+	public JavaFile.Term visitArrayAccess(Expr.ArrayAccess expr, JavaFile.Class parent) {
+		JavaFile.Term src = visitExpression(expr.getFirstOperand(), parent);
+		JavaFile.Term index = visitExpression(expr.getSecondOperand(), parent);
 		return new JavaFile.ArrayAccess(src, toInt(index, Type.Int));
 	}
 
-	@Override public JavaFile.Term visitArrayGenerator(Expr.ArrayGenerator expr, JavaFile.Class parent) {
+	@Override
+	public JavaFile.Term visitArrayGenerator(Expr.ArrayGenerator expr, JavaFile.Class parent) {
 		throw new IllegalArgumentException("IMPLEMENT ME");
 	}
 
-	@Override public JavaFile.Term visitArrayInitialiser(Expr.ArrayInitialiser expr, JavaFile.Class parent) {
+	@Override
+	public JavaFile.Term visitArrayInitialiser(Expr.ArrayInitialiser expr, JavaFile.Class parent) {
 		Tuple<Expr> operands = expr.getOperands();
 		List<JavaFile.Term> children = new ArrayList<>();
 		for (int i = 0; i != operands.size(); ++i) {
-			children.add(visitExpression(operands.get(i),parent));
+			children.add(visitExpression(operands.get(i), parent));
 		}
 		JavaFile.Array type = (JavaFile.Array) visitType(expr.getType(), null);
 		return new JavaFile.NewArray(type, null, children);
 	}
 
-	@Override public JavaFile.Term visitArrayLength(Expr.ArrayLength expr, JavaFile.Class parent) {
-		JavaFile.Term src = visitExpression(expr.getOperand(),parent);
+	@Override
+	public JavaFile.Term visitArrayLength(Expr.ArrayLength expr, JavaFile.Class parent) {
+		JavaFile.Term src = visitExpression(expr.getOperand(), parent);
 		// FIXME: converting the array length to a big integer is a temporary
 		// fix. It works around the fact that the Whiley compiler types the
 		// return of an array length expression as just "int", when in fact it
@@ -459,7 +478,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	@Override
 	public JavaFile.Term visitCast(Expr.Cast expr, JavaFile.Class parent) {
-		return registerCoercion(expr.getType(),expr.getOperand(), parent);
+		return registerCoercion(expr.getType(), expr.getOperand(), parent);
 	}
 
 	@Override
@@ -503,7 +522,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 			JavaFile.Term eq = new JavaFile.Invoke(null, new String[] { "Wy", "equals" }, lhs, rhs);
 			return new JavaFile.Operator(JavaFile.Operator.Kind.NOT, eq);
 		} else {
-			return translateOperator(JavaFile.Operator.Kind.NEQ,expr.getFirstOperand(),expr.getSecondOperand());
+			return translateOperator(JavaFile.Operator.Kind.NEQ, expr.getFirstOperand(), expr.getSecondOperand());
 		}
 	}
 
@@ -597,22 +616,22 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	@Override
 	public JavaFile.Term visitLogicalNot(Expr.LogicalNot expr, JavaFile.Class parent) {
-		return translateOperator(JavaFile.Operator.Kind.NOT,expr.getOperand());
+		return translateOperator(JavaFile.Operator.Kind.NOT, expr.getOperand());
 	}
 
 	@Override
 	public JavaFile.Term visitLogicalAnd(Expr.LogicalAnd expr, JavaFile.Class parent) {
-		return translateOperator(JavaFile.Operator.Kind.AND,expr.getOperands());
+		return translateOperator(JavaFile.Operator.Kind.AND, expr.getOperands());
 	}
 
 	@Override
 	public JavaFile.Term visitLogicalOr(Expr.LogicalOr expr, JavaFile.Class parent) {
-		return translateOperator(JavaFile.Operator.Kind.OR,expr.getOperands());
+		return translateOperator(JavaFile.Operator.Kind.OR, expr.getOperands());
 	}
 
 	@Override
 	public JavaFile.Term visitLogicalIff(Expr.LogicalIff expr, JavaFile.Class parent) {
-		return translateOperator(JavaFile.Operator.Kind.EQ,expr.getFirstOperand(),expr.getSecondOperand());
+		return translateOperator(JavaFile.Operator.Kind.EQ, expr.getFirstOperand(), expr.getSecondOperand());
 	}
 
 	@Override
@@ -674,19 +693,19 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		parameters.add(translateRecordSchema(type));
 		for (int i = 0; i != operands.size(); ++i) {
 			Expr operand = operands.get(i);
-			parameters.add(visitExpression(operand,parent));
+			parameters.add(visitExpression(operand, parent));
 		}
 		return new JavaFile.New(WHILEY_RECORD, parameters);
 	}
 
 	@Override
 	public JavaFile.Term visitUniversalQuantifier(Expr.UniversalQuantifier c, JavaFile.Class parent) {
-		return translateQuantifier(c,parent);
+		return translateQuantifier(c, parent);
 	}
 
 	@Override
 	public JavaFile.Term visitExistentialQuantifier(Expr.ExistentialQuantifier c, JavaFile.Class parent) {
-		return translateQuantifier(c,parent);
+		return translateQuantifier(c, parent);
 	}
 
 	@Override
@@ -775,11 +794,73 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	private JavaFile.Type[] visitTypes(Type... types) {
 		JavaFile.Type[] rs = new JavaFile.Type[types.length];
 		for (int i = 0; i != types.length; ++i) {
-			rs[i] = visitType(types[i],null);
+			rs[i] = visitType(types[i], null);
 		}
 		return rs;
 	}
 
+	// ===================================================================================
+	// Main Launcher
+	// ===================================================================================
+
+	/**
+	 * The main launcher is responsible for invoking the Java main(String[])
+	 * function. The launcher is only added if there is an exported public method
+	 * main which accepts the arguments ascii::string[].
+	 *
+	 * @param jcs
+	 * @param wf
+	 */
+	private void addMainLauncher(WhileyFile wf, JavaFile.Class jcs) {
+		Decl.Method mainMethod = findMainMethod(wf);
+		//
+		if (mainMethod != null) {
+			JavaFile.Method meth = new JavaFile.Method("main", JavaFile.VOID);
+			// Set modifiers to static public
+			meth.getModifiers().add(JavaFile.Modifier.PUBLIC);
+			meth.getModifiers().add(JavaFile.Modifier.STATIC);
+			// Add parameter String[] args
+			JavaFile.VariableDeclaration args = new JavaFile.VariableDeclaration(JAVA_LANG_STRING_ARRAY, "args");
+			meth.getParameters().add(args);
+			ArrayList<JavaFile.Term> body = new ArrayList<>();
+			JavaFile.Term conversion = new JavaFile.Invoke(null,new String[] {"Wy","toAsciiStrings"},new JavaFile.VariableAccess("args"));
+			body.add(new JavaFile.Invoke(null, "main", conversion));
+			meth.setBody(new JavaFile.Block(body));
+			jcs.getDeclarations().add(meth);
+		}
+	}
+
+	private Decl.Method findMainMethod(WhileyFile wf) {
+		Tuple<Decl> declarations = wf.getDeclarations();
+		for (int i = 0; i != declarations.size(); ++i) {
+			Decl decl = declarations.get(i);
+			if (decl instanceof Decl.Method) {
+				Decl.Method meth = (Decl.Method) decl;
+				if (isMainMethod(meth)) {
+					return meth;
+				}
+			}
+		}
+		return null;
+	}
+
+	private static final Type.Array ARGS_ARR_T = new Type.Array(
+			new Type.Nominal(new Name(new Identifier("ascii"), new Identifier("string"))));
+	private static final Type.Method MAIN_METHOD_T = new Type.Method(new Tuple<Type>(ARGS_ARR_T), new Tuple<>(),
+			new Tuple<>(), new Tuple<>());
+
+	private boolean isMainMethod(Decl.Method method) {
+		Tuple<Modifier> modifiers = method.getModifiers();
+		//
+		if (method.getName().get().equals("main") && modifiers.match(Modifier.Export.class) != null
+				&& modifiers.match(Modifier.Public.class) != null) {
+			// We have an appropriate named method which is public and exported. Now, does
+			// it have the right type?
+			Type.Method type = method.getType();
+			return type.equals(MAIN_METHOD_T);
+		}
+		return false;
+	}
 
 	// ===================================================================================
 	// Translation Helpers
@@ -797,14 +878,14 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		// Construct appropriate parameters / arguments
 		JavaFile.Term[] arguments = new JavaFile.Term[usedVariables.size()];
 		int argIndex = 0;
-		for(Decl.Variable vd : usedVariables) {
+		for (Decl.Variable vd : usedVariables) {
 			JavaFile.Type pt = visitType(vd.getType(), null);
 			method.getParameters().add(new JavaFile.VariableDeclaration(pt, vd.getName().toString(), null));
 			arguments[argIndex++] = new JavaFile.VariableAccess(vd.getName().toString());
 		}
 		// Translate each of the parameters into a for loop
 		List<JavaFile.Term> terms = new ArrayList<>();
-		terms.add(translateQuantifierBody(expr,0,parent));
+		terms.add(translateQuantifierBody(expr, 0, parent));
 		// Add final return statement
 		terms.add(new JavaFile.Return(new JavaFile.Constant(expr instanceof Expr.UniversalQuantifier)));
 		// Create method body and add to enclosing class
@@ -816,11 +897,11 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 
 	private JavaFile.Term translateQuantifierBody(Expr.Quantifier expr, int i, JavaFile.Class parent) {
 		Tuple<Decl.Variable> parameters = expr.getParameters();
-		if(i >= parameters.size()) {
+		if (i >= parameters.size()) {
 			// base case
 			JavaFile.Term condition = visitExpression(expr.getOperand(), parent);
 			JavaFile.Block trueBranch = new JavaFile.Block();
-			if(expr instanceof Expr.UniversalQuantifier) {
+			if (expr instanceof Expr.UniversalQuantifier) {
 				condition = new JavaFile.Operator(JavaFile.Operator.Kind.NOT, condition);
 				trueBranch.getTerms().add(new JavaFile.Return(new JavaFile.Constant(false)));
 			} else {
@@ -855,18 +936,22 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		public void visitVariableAccess(WhileyFile.Expr.VariableAccess expr, HashSet<Decl.Variable> used) {
 			used.add(expr.getVariableDeclaration());
 		}
+
 		@Override
 		public void visitUniversalQuantifier(WhileyFile.Expr.UniversalQuantifier expr, HashSet<Decl.Variable> used) {
 			visitVariables(expr.getParameters(), used);
 			visitExpression(expr.getOperand(), used);
-			removeAllDeclared(expr.getParameters(),used);
+			removeAllDeclared(expr.getParameters(), used);
 		}
+
 		@Override
-		public void visitExistentialQuantifier(WhileyFile.Expr.ExistentialQuantifier expr, HashSet<Decl.Variable> used) {
+		public void visitExistentialQuantifier(WhileyFile.Expr.ExistentialQuantifier expr,
+				HashSet<Decl.Variable> used) {
 			visitVariables(expr.getParameters(), used);
 			visitExpression(expr.getOperand(), used);
-			removeAllDeclared(expr.getParameters(),used);
+			removeAllDeclared(expr.getParameters(), used);
 		}
+
 		@Override
 		public void visitType(WhileyFile.Type type, HashSet<Decl.Variable> used) {
 			// No need to visit types
@@ -1020,14 +1105,14 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 	 * @param coercions
 	 * @param parent
 	 */
-	private void translateCoercions(List<Pair<Type,Type>> coercions, JavaFile.Class parent) {
+	private void translateCoercions(List<Pair<Type, Type>> coercions, JavaFile.Class parent) {
 		int size = 0;
-		while(size < coercions.size()) {
+		while (size < coercions.size()) {
 			int start = size;
 			size = coercions.size();
-			for(int i=start;i!=size;++i) {
-				Pair<Type,Type> coercion = coercions.get(i);
-				parent.getDeclarations().add(translateCoercion(i, coercion.first(),coercion.second()));
+			for (int i = start; i != size; ++i) {
+				Pair<Type, Type> coercion = coercions.get(i);
+				parent.getDeclarations().add(translateCoercion(i, coercion.first(), coercion.second()));
 			}
 		}
 	}
@@ -1127,9 +1212,11 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class,JavaFile.Te
 		}
 		return new Type.Nominal(new Name(components));
 	}
+
+	private static JavaFile.Array JAVA_LANG_STRING_ARRAY = new JavaFile.Array(new JavaFile.Reference("String"));
 	private static JavaFile.Reference JAVA_MATH_BIGINTEGER = new JavaFile.Reference("BigInteger");
 	private static JavaFile.Reference JAVA_LANG_OBJECT = new JavaFile.Reference("Object");
-	private static final JavaFile.Reference WHILEY_RECORD = new JavaFile.Reference("Wy","Struct");
+	private static final JavaFile.Reference WHILEY_RECORD = new JavaFile.Reference("Wy", "Struct");
 
 	/**
 	 * Convert a given term which returns a value of integer type into a Java int.
