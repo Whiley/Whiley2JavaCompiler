@@ -294,6 +294,11 @@ public class JavaFileWriter {
 				out.print(")");
 				return;
 			}
+		} else if(term instanceof JavaFile.Cast) {
+			out.print("(");
+			writeExpression(term);
+			out.print(")");
+			return;
 		}
 		writeExpression(term);
 	}
@@ -335,7 +340,7 @@ public class JavaFileWriter {
 	}
 
 	private void writeArrayAccess(JavaFile.ArrayAccess term) {
-		writeExpression(term.getSource());
+		writeExpressionWithBraces(term.getSource());
 		out.print("[");
 		writeExpression(term.getIndex());
 		out.print("]");
@@ -367,7 +372,7 @@ public class JavaFileWriter {
 	}
 
 	private void writeFieldAccess(JavaFile.FieldAccess term) {
-		writeExpression(term.getSource());
+		writeExpressionWithBraces(term.getSource());
 		out.print(".");
 		out.print(term.getField());
 	}
@@ -382,7 +387,7 @@ public class JavaFileWriter {
 		JavaFile.Term receiver = term.getReceiver();
 		List<JavaFile.Type> typeArgs = term.getTypeArguments();
 		if(receiver != null) {
-			writeExpression(receiver);
+			writeExpressionWithBraces(receiver);
 			out.print(".");
 		}
 		if(typeArgs != null) {

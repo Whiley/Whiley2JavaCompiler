@@ -52,11 +52,17 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	 */
 	private Logger logger = Logger.NULL;
 
+	/**
+	 * Record the test of generated type tests
+	 */
+	private TypeTestGenerator typeTestGen;
+
 	private ArrayList<Pair<Type, Type>> coercions;
 
 	public JavaCompileTask(Build.Project project) {
 		this.project = project;
 		this.typeSystem = new TypeSystem(project);
+		this.typeTestGen = new TypeTestGenerator(typeSystem);
 	}
 
 	public void setLogger(Logger logger) {
@@ -127,6 +133,8 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		jcd.getModifiers().add(JavaFile.Modifier.FINAL);
 		// Translate all declarations
 		visitWhileyFile(wf, jcd);
+		// Add all type tests
+		jcd.getDeclarations().addAll(typeTestGen.generateSupplementaryDeclarations());
 		// Add all required coercions
 		translateCoercions(coercions, jcd);
 		// Add launcher (if appropriate)
@@ -419,7 +427,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		JavaFile.Term index = visitExpression(expr.getSecondOperand(), parent);
 		JavaFile.Term t = new JavaFile.ArrayAccess(src, toInt(index, Type.Int));
 		if (!expr.isMove()) {
-			t = translateClone(t, expr.getType());
+			t = addClone(t, expr.getType());
 		}
 		return t;
 	}
@@ -551,7 +559,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		JavaFile.Term t = new JavaFile.Invoke(new JavaFile.Type[] { type }, source, "get",
 				new JavaFile.Constant(expr.getField().toString()));
 		if (!expr.isMove()) {
-			t = translateClone(t, expr.getType());
+			t = addClone(t, expr.getType());
 		}
 		return t;
 	}
@@ -678,7 +686,8 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	@Override
 	public JavaFile.Term visitIs(Expr.Is expr, JavaFile.Class parent) {
-		return translateTypeTest(expr, parent);
+		JavaFile.Term operand = visitExpression(expr.getOperand(), parent);
+		return typeTestGen.generate(expr.getTestType(), operand);
 	}
 
 	@Override
@@ -734,11 +743,16 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	public JavaFile.Term visitVariableAccess(Expr.VariableAccess expr, JavaFile.Class parent) {
 		Decl.Variable vd = expr.getVariableDeclaration();
 		JavaFile.Term t = new JavaFile.VariableAccess(vd.getName().toString());
-		JavaFile.Type type = visitType(expr.getType(), parent);
+		if(!expr.getType().equals(vd.getType()) ) {
+			// Some form of cast is required here
+			JavaFile.Type type = visitType(expr.getType(), parent);
+			// FIXME: need something more generic here
+			t = new JavaFile.Cast(type, t);
+		}
 		if (expr.getOpcode() == EXPR_variablecopy) {
 			// Since this type is not copyable, we need to clone it to ensure
 			// that ownership is properly preserved.
-			t = translateClone(t, expr.getType());
+			t = addClone(t, expr.getType());
 		}
 		return t;
 	}
@@ -821,6 +835,20 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 			result = union(result, next);
 		}
 		return result;
+	}
+
+	@Override
+	public JavaFile.Type visitIntersection(Type.Intersection type, JavaFile.Class parent) {
+		try {
+			Type simplified = typeSystem.extractReadableType(type, null);
+			if(simplified instanceof Type.Intersection) {
+				return JAVA_LANG_OBJECT;
+			} else {
+				return visitType(simplified, parent);
+			}
+		} catch(NameResolver.ResolutionError e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	/**
@@ -935,85 +963,6 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	// ===================================================================================
 
 	/**
-	 * <p>
-	 * Translate a type test expression. This is a complex procedure which may need
-	 * to recursively explore the value being tested. Initially, it will employ an
-	 * inline test whereever possible. For example, consider this case:
-	 * </p>
-	 *
-	 * <pre>
-	 * function f(int|null x) -> (int r):
-	 *    if x is int:
-	 *       ...
-	 * </pre>
-	 *
-	 * <p>
-	 * Here, we can translate <code>x is int</code> into
-	 * <code>x instanceof BigInteger</code>. However, not all tests can be
-	 * translated inline. For example, consider this test:
-	 * </p>
-	 *
-	 * <pre>
-	 * function f(any[] xs) -> (int r):
-	 *     if xs is int[]:
-	 *        ...
-	 * </pre>
-	 *
-	 * <p>
-	 * This necessarily requires iterating every element of <code>xs</code> to check
-	 * whether or not it's a BigInteger. This test translates into
-	 * <code>isType$ia(xs)</code>, defined as:
-	 * </p>
-	 *
-	 * <pre>
-	 * private static boolean isType$ia(Object[] xs) {
-	 * 	for (int i = 0; i != xs.length; ++i) {
-	 * 		if (!xs[i] instanceof BigInteger) {
-	 * 			return false;
-	 * 		}
-	 * 	}
-	 * 	return true;
-	 * }
-	 * </pre>
-	 * <p>
-	 * Observe that there are optimisations which can be employed. For example,
-	 * consider this case:
-	 * </p>
-	 *
-	 * <pre>
-	 * function f(int|(int[]) xs) -> (int r):
-	 *     if xs is int[]:
-	 *        ...
-	 * </pre>
-	 * <p>
-	 * Here, we can translate the test into <code>!(xs instanceof BigInteger)</code>
-	 * based on the type information we have available.
-	 * </p>
-	 *
-	 * @param expr
-	 * @param parent
-	 * @return
-	 */
-	private JavaFile.Term translateTypeTest(Expr.Is expr, JavaFile.Class parent) {
-		JavaFile.Term src = visitExpression(expr.getOperand(), parent);
-		Type type = expr.getTestType();
-		// First, attempt inline translation (if possible)
-		switch (type.getOpcode()) {
-		case TYPE_null:
-			// Translate "x is null" as "x == null" in Java.
-			return new JavaFile.Operator(JavaFile.Operator.Kind.EQ, src, new JavaFile.Constant(null));
-		case TYPE_bool:
-			return new JavaFile.InstanceOf(src, JAVA_LANG_BOOLEAN);
-		case TYPE_byte:
-			return new JavaFile.InstanceOf(src, JAVA_LANG_BYTE);
-		case TYPE_int:
-			return new JavaFile.InstanceOf(src, JAVA_MATH_BIGINTEGER);
-		}
-		// At this point, we need a more complex translation.
-		throw new IllegalArgumentException("IMPLEMENT TYPE TESTS");
-	}
-
-	/**
 	 * Clone the result of a given term, though do this only as necessary. For
 	 * example, primitive types never need to be cloned. Likewise, BigInteger is
 	 * immutable and doesn't need to be cloned either.
@@ -1022,7 +971,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	 * @param type
 	 * @return
 	 */
-	private JavaFile.Term translateClone(JavaFile.Term t, Type type) {
+	private JavaFile.Term addClone(JavaFile.Term t, Type type) {
 		if (!isCopyable(type)) {
 			return new JavaFile.Invoke(null, new String[] { "Wy", "clone" }, t);
 		} else {

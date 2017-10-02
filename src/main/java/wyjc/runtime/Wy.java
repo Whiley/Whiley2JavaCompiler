@@ -16,7 +16,16 @@ public class Wy {
 	}
 
 	public static boolean equals(Object lhs, Object rhs) {
-		return lhs == rhs || (lhs != null && lhs.equals(rhs));
+		// NOTE: this is pretty ugly?
+		if(lhs instanceof boolean[] && rhs instanceof boolean[]) {
+			return equals((boolean[]) lhs, (boolean[]) rhs);
+		} else if(lhs instanceof byte[] && rhs instanceof byte[]) {
+			return equals((byte[]) lhs, (byte[]) rhs);
+		} else if (lhs instanceof Object[] && rhs instanceof Object[]) {
+			return equals((Object[]) lhs, (Object[]) rhs);
+		} else {
+			return lhs == rhs || (lhs != null && lhs.equals(rhs));
+		}
 	}
 
 	public static boolean equals(boolean[] lhs, boolean[] rhs) {
@@ -32,14 +41,14 @@ public class Wy {
 	}
 
 	public static void debug(BigInteger[] arr) {
-		for(int i=0;i!=arr.length;++i) {
+		for (int i = 0; i != arr.length; ++i) {
 			System.err.print((char) arr[i].intValue());
 		}
 	}
 
 	public static BigInteger[] array(BigInteger value, BigInteger length) {
 		BigInteger[] array = new BigInteger[length.intValue()];
-		for(int i=0;i!=array.length;++i) {
+		for (int i = 0; i != array.length; ++i) {
 			array[i] = value;
 		}
 		return array;
@@ -47,7 +56,7 @@ public class Wy {
 
 	public static boolean[] array(boolean value, BigInteger length) {
 		boolean[] array = new boolean[length.intValue()];
-		for(int i=0;i!=array.length;++i) {
+		for (int i = 0; i != array.length; ++i) {
 			array[i] = value;
 		}
 		return array;
@@ -55,7 +64,7 @@ public class Wy {
 
 	public static byte[] array(byte value, BigInteger length) {
 		byte[] array = new byte[length.intValue()];
-		for(int i=0;i!=array.length;++i) {
+		for (int i = 0; i != array.length; ++i) {
 			array[i] = value;
 		}
 		return array;
@@ -63,12 +72,11 @@ public class Wy {
 
 	public static <T> T[] array(T value, BigInteger length) {
 		T[] array = (T[]) Array.newInstance(value.getClass(), length.intValue());
-		for(int i=0;i!=array.length;++i) {
+		for (int i = 0; i != array.length; ++i) {
 			array[i] = value;
 		}
 		return array;
 	}
-
 
 	/**
 	 * Convert an instance of java.lang.String[] into an instance of ascii:string[].
@@ -78,7 +86,7 @@ public class Wy {
 	 */
 	public static BigInteger[][] toAsciiStrings(String[] args) {
 		BigInteger[][] nargs = new BigInteger[args.length][];
-		for(int i=0;i!=args.length;++i) {
+		for (int i = 0; i != args.length; ++i) {
 			nargs[i] = toAsciiString(args[i]);
 		}
 		return nargs;
@@ -92,7 +100,7 @@ public class Wy {
 	 */
 	public static BigInteger[] toAsciiString(String arg) {
 		BigInteger[] narg = new BigInteger[arg.length()];
-		for(int i=0;i!=narg.length;++i) {
+		for (int i = 0; i != narg.length; ++i) {
 			narg[i] = BigInteger.valueOf(arg.charAt(i));
 		}
 		return narg;
@@ -177,6 +185,22 @@ public class Wy {
 		// ================================================================================
 		// Record Operations
 		// ================================================================================
+
+		/**
+		 * Check whether a given record has a given field.
+		 *
+		 * @param field
+		 * @return
+		 */
+		public boolean has(final String field) {
+			String[] schema = this.schema.split(",");
+			for (int i = 0; i != schema.length; ++i) {
+				if (schema[i].equals(field)) {
+					return true;
+				}
+			}
+			return false;
+		}
 
 		/**
 		 * Direct field read. This is possible when the exact object layout is known.
