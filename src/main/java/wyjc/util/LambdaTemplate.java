@@ -2,8 +2,6 @@ package wyjc.util;
 
 import static jasm.lang.JvmTypes.JAVA_LANG_OBJECT;
 import static jasm.lang.Modifier.*;
-import static wyjc.builder.JvmCompileTask.JAVA_LANG_OBJECT_ARRAY;
-import static wyjc.builder.JvmCompileTask.WHILEYLAMBDA;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,7 +13,6 @@ import jasm.lang.ClassFile;
 import jasm.lang.JvmType;
 import jasm.lang.JvmTypes;
 import jasm.lang.Modifier;
-import wyjc.builder.JvmCompileTask;
 
 /**
  * This is a template for generating a "lambda class", which is used to
@@ -49,6 +46,9 @@ import wyjc.builder.JvmCompileTask;
  *
  */
 public class LambdaTemplate {
+
+	public final static JvmType.Array JAVA_LANG_OBJECT_ARRAY = new JvmType.Array(JAVA_LANG_OBJECT);
+	public final static JvmType.Clazz WHILEYLAMBDA = null; // FIXME:
 
 	/**
 	 * JVM Class version number to use (e.g. 49)
@@ -155,10 +155,10 @@ public class LambdaTemplate {
 		ClassFile.Method constructor = new ClassFile.Method("<init>", constructorType, modifiers);
 		// Create body of constructor which called super-class constructor, and
 		// assigns each environment parameter to a corresponding field.
-		ArrayList<Bytecode> bytecodes = new ArrayList<Bytecode>();
+		ArrayList<Bytecode> bytecodes = new ArrayList<>();
 		// Call superclass constructor
 		bytecodes.add(new Bytecode.Load(0, thisClass));
-		bytecodes.add(new Bytecode.Invoke(JvmCompileTask.WHILEYLAMBDA, "<init>", superConstructorType,
+		bytecodes.add(new Bytecode.Invoke(WHILEYLAMBDA, "<init>", superConstructorType,
 				Bytecode.InvokeMode.SPECIAL));
 		// Assign each parameter to a corresponding named field.
 		for (int i = 0; i != environment.length; ++i) {
@@ -193,13 +193,13 @@ public class LambdaTemplate {
 		JvmType.Function callType = new JvmType.Function(JAVA_LANG_OBJECT, JAVA_LANG_OBJECT_ARRAY);
 		ClassFile.Method method = new ClassFile.Method("call", callType, modifiers);
 		// Create body of call method
-		List<Bytecode> bytecodes = new ArrayList<Bytecode>();
+		List<Bytecode> bytecodes = new ArrayList<>();
 		// Load parameters onto stack from the parameters array
 		decodeLambdaParameterArray(1,type.parameterTypes(),bytecodes);
 		// Load environment onto stack
 		loadEnvironment(bytecodes);
 		// Construct the actual target type
-		ArrayList<JvmType> actualParameterTypes = new ArrayList<JvmType>(type.parameterTypes());
+		ArrayList<JvmType> actualParameterTypes = new ArrayList<>(type.parameterTypes());
 		actualParameterTypes.addAll(Arrays.asList(environment));
 		JvmType.Function actualType = new JvmType.Function(type.returnType(), actualParameterTypes);
 		// Now, invoke the target method
@@ -271,7 +271,7 @@ public class LambdaTemplate {
 	 * @return
 	 */
 	private static List<Modifier> modifiers(Modifier... mods) {
-		ArrayList<Modifier> modifiers = new ArrayList<Modifier>();
+		ArrayList<Modifier> modifiers = new ArrayList<>();
 		for (Modifier m : mods) {
 			if (m != null) {
 				modifiers.add(m);

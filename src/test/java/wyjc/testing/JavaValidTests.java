@@ -32,16 +32,25 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaCompiler.CompilationTask;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
 
 import org.junit.*;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import wyc.commands.Compile;
+import wyc.command.Compile;
 import wyc.util.TestUtils;
 import wycc.util.Logger;
 import wycc.util.Pair;
@@ -67,54 +76,53 @@ public class JavaValidTests {
 	public final static Map<String, String> IGNORED = new HashMap<>();
 
 	static {
-		IGNORED.put("Coercion_Valid_8", "#681");
-		IGNORED.put("Complex_Valid_2", "#5,#692");
-		IGNORED.put("Complex_Valid_3", "Issue ???");
-		IGNORED.put("Complex_Valid_4", "#681");
-		IGNORED.put("Complex_Valid_8", "#5,#692");
-		IGNORED.put("Contractive_Valid_1", "#6");
-		IGNORED.put("ConstrainedIntersection_Valid_1", "unknown");
-		IGNORED.put("ConstrainedList_Valid_15", "#5,#692");
-		IGNORED.put("ConstrainedNegation_Valid_1", "#342");
-		IGNORED.put("ConstrainedNegation_Valid_2", "#342");
-		IGNORED.put("DoWhile_Valid_4", "#681");
-		IGNORED.put("FunctionRef_Valid_10", "#663");
-		IGNORED.put("FunctionRef_Valid_11", "#663");
-		IGNORED.put("FunctionRef_Valid_13", "#555");
-		IGNORED.put("Function_Valid_11", "unknown");
-		IGNORED.put("Function_Valid_15", "unknown");
-		IGNORED.put("IfElse_Valid_4", "#663");
-		IGNORED.put("Import_Valid_4", "#492");
-		IGNORED.put("Import_Valid_5", "#492");
-		IGNORED.put("Intersection_Valid_2", "Issue ???");
-		IGNORED.put("Lifetime_Lambda_Valid_4", "#641");
-		IGNORED.put("ListAccess_Valid_6", "Issue ???");
-		IGNORED.put("OpenRecord_Valid_5", "#663");
-		IGNORED.put("OpenRecord_Valid_6", "#664");
-		IGNORED.put("RecursiveType_Valid_2", "#663");
-		IGNORED.put("RecordSubtype_Valid_1", "Issue ???");
-		IGNORED.put("RecordSubtype_Valid_2", "Issue ???");
-		IGNORED.put("RecursiveType_Valid_12", "#339");
-		IGNORED.put("RecursiveType_Valid_21", "#663");
-		IGNORED.put("RecursiveType_Valid_22", "#339");
-		IGNORED.put("RecursiveType_Valid_28", "#364");
-		IGNORED.put("RecursiveType_Valid_3", "#681");
-		IGNORED.put("RecursiveType_Valid_4", "#406");
-		IGNORED.put("RecursiveType_Valid_5", "#18");
-		IGNORED.put("Syntax_Valid_1", "#5");
-		IGNORED.put("TypeEquals_Valid_23", "Issue ???");
-		IGNORED.put("TypeEquals_Valid_24", "#681");
-		IGNORED.put("TypeEquals_Valid_29", "#681");
-		IGNORED.put("TypeEquals_Valid_34", "#681");
-		IGNORED.put("TypeEquals_Valid_36", "Issue ???");
-		IGNORED.put("TypeEquals_Valid_37", "Issue ???");
-		IGNORED.put("TypeEquals_Valid_38", "Issue ???");
-		IGNORED.put("TypeEquals_Valid_41", "Issue ???");
-		IGNORED.put("TypeEquals_Valid_42", "#681");
-		IGNORED.put("TypeEquals_Valid_47", "#681");
-		IGNORED.put("TypeEquals_Valid_57", "???");
-		IGNORED.put("While_Valid_15", "#681");
-		IGNORED.put("While_Valid_20", "unknown");
+		// =============================================
+		// WyC Prexisting problems
+		// =============================================
+
+		// Problem Type Checking Union Type
+		IGNORED.put("RecordSubtype_Valid_1", "#696");
+		IGNORED.put("RecordSubtype_Valid_2", "#696");
+		// Function Overloading for Nominal Types
+		IGNORED.put("Function_Valid_11", "#702");
+		IGNORED.put("Function_Valid_15", "#702");
+		//  Normalisation for Method Subtyping
+		IGNORED.put("Lifetime_Lambda_Valid_2", "#794");
+		IGNORED.put("Lifetime_Lambda_Valid_5", "#794");
+		IGNORED.put("Lifetime_Lambda_Valid_6", "#794");
+		// Support Captured Lifetime Parameters
+		IGNORED.put("Lifetime_Lambda_Valid_7", "#795");
+		// Type Tests with Invariants
+		IGNORED.put("TypeEquals_Valid_23", "#787");
+		IGNORED.put("TypeEquals_Valid_25", "#787");
+		IGNORED.put("TypeEquals_Valid_30", "#787");
+		IGNORED.put("TypeEquals_Valid_41", "#787");
+		// Unclassified
+		IGNORED.put("Lifetime_Valid_8", "???");
+
+		// =============================================
+		// WyJC Specific problems
+		// =============================================
+
+		// Overloaded Union Constructors
+		IGNORED.put("Access_Valid_2", "#12");
+		IGNORED.put("Array_Valid_1", "#12");
+		IGNORED.put("ConstrainedInt_Valid_16", "#12");
+		IGNORED.put("ConstrainedList_Valid_2", "#12");
+		// Translating Lambdas
+		IGNORED.put("AddressExpression_Valid_1", "#13");
+		IGNORED.put("AddressExpression_Valid_2", "#13");
+		IGNORED.put("AddressExpression_Valid_3", "#13");
+		IGNORED.put("AddressExpression_Valid_4", "#13");
+		// Access After Clone
+		IGNORED.put("BoolRecord_Valid_2", "#15");
+		IGNORED.put("ConstrainedInt_Valid_11", "#15");
+		IGNORED.put("ConstrainedNegation_Valid_2", "#15");
+		IGNORED.put("ConstrainedRecord_Valid_1", "#15");
+		// Runtime Type Tests
+		IGNORED.put("Coercion_Valid_7", "#18");
+		IGNORED.put("Coercion_Valid_8", "#18");
+		IGNORED.put("Coercion_Valid_9", "#18");
 	}
 
 	/**
@@ -156,7 +164,7 @@ public class JavaValidTests {
 			fail("Test failed to compile!");
 		}
 		// compile the generated Java Program.
-		if (compileJava2Bytecode(WHILEY_SRC_DIR, name + ".java") == null) {
+		if (!compileJava2Bytecode(WHILEY_SRC_DIR, name + ".java")) {
 			fail("unable to compile Java file");
 		} else {
 			// execute the generated Java Program.
@@ -165,7 +173,7 @@ public class JavaValidTests {
 			// then
 			// we wouldn't need to append the following onto CLASSPATH.
 			CLASSPATH = WHILEY_SRC_DIR + File.pathSeparator + CLASSPATH;
-			String output = exec(CLASSPATH, ".", "wyjc.testing.RuntimeValidTests", name);
+			String output = exec(CLASSPATH, ".", "wyjc.testing.JavaValidTests", name);
 			if (!output.equals("")) {
 				System.out.println(output);
 				fail("unexpected output!");
@@ -205,35 +213,29 @@ public class JavaValidTests {
 	 * @return
 	 * @throws IOException
 	 */
-	public static String compileJava2Bytecode(String whileydir, String javaFilename) throws IOException {
+	public static boolean compileJava2Bytecode(String whileydir, String javaFilename) throws IOException {
 		try {
-			whileydir = whileydir.replace('/', File.separatorChar);
-			String tmp = "javac " + javaFilename;
-			Process p = Runtime.getRuntime().exec(tmp, null, new File(whileydir));
-
-			StringBuffer syserr = new StringBuffer();
-			StringBuffer sysout = new StringBuffer();
-			new TestUtils.StreamGrabber(p.getErrorStream(), syserr);
-			new TestUtils.StreamGrabber(p.getInputStream(), sysout);
-			int exitCode = p.waitFor();
-			System.out.println(sysout.toString());
-			if (exitCode != 0) {
-				System.err
-						.println("============================================================");
-				System.err.println(javaFilename);
-				System.err
-						.println("============================================================");
-				System.err.println(syserr);
-				return null;
+			// Make use of java compiler API
+			final JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+			final DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+			final StandardJavaFileManager manager = compiler.getStandardFileManager(diagnostics, null, null);
+			final File file = new File(whileydir + File.separatorChar + javaFilename);
+			final Iterable<? extends JavaFileObject> sources = manager.getJavaFileObjectsFromFiles(Arrays.asList(file));
+			final CompilationTask task = compiler.getTask(null, manager, diagnostics, null, null, sources);
+			if (task.call()) {
+				return true;
 			} else {
-				return sysout.toString();
+				for (final Diagnostic<? extends JavaFileObject> diagnostic : diagnostics.getDiagnostics()) {
+					System.out.format("%s, line %d in %s\n", diagnostic.getMessage(null), diagnostic.getLineNumber(),
+							diagnostic.getSource().getName());
+				}
 			}
 		} catch (Exception ex) {
 			ex.printStackTrace();
 			fail("Problem running compiled test");
 		}
 
-		return null;
+		return false;
 	}
 
 	/**
@@ -259,7 +261,7 @@ public class JavaValidTests {
 			classPath = classPath.replace('/', File.separatorChar);
 			classPath = classPath.replace(':', File.pathSeparatorChar);
 			srcDir = srcDir.replace('/', File.separatorChar);
-			String tmp = "java -cp " + classPath + " " + className;
+			String tmp = "java -ea -cp " + classPath + " " + className;
 			for (String arg : args) {
 				tmp += " " + arg;
 			}

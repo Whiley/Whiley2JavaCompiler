@@ -1,13 +1,8 @@
 package wyjc.util;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-
-import wybs.util.ResolveError;
 import wycc.util.Pair;
-import wyil.lang.WyilFile;
 import wyjc.core.JavaFile;
 
 public class JavaCodeGenerator {
@@ -37,7 +32,7 @@ public class JavaCodeGenerator {
 
 	private static JavaFile.Constructor generateUnionConstructor(String name, int tag, JavaFile.Type type) {
 		JavaFile.Constructor constructor = new JavaFile.Constructor(name);
-		constructor.getParameters().add(new Pair<>(type, "content"));
+		constructor.getParameters().add(new JavaFile.VariableDeclaration(type, "content"));
 		//
 		JavaFile.Block body = new JavaFile.Block();
 		JavaFile.Term thisVar = new JavaFile.VariableAccess("this");
@@ -120,10 +115,10 @@ public class JavaCodeGenerator {
 
 	private static JavaFile.Constructor generateConstructor(String name, List<JavaFile.Field> fields) {
 		JavaFile.Constructor constructor = new JavaFile.Constructor(name);
-		List<Pair<JavaFile.Type, String>> parameters = constructor.getParameters();
+		List<JavaFile.VariableDeclaration> parameters = constructor.getParameters();
 		for (int i = 0; i != fields.size(); ++i) {
 			JavaFile.Field field = fields.get(i);
-			parameters.add(new Pair<>(field.getType(), field.getName()));
+			parameters.add(new JavaFile.VariableDeclaration(field.getType(), field.getName()));
 		}
 		JavaFile.Block body = new JavaFile.Block();
 		for (int i = 0; i != fields.size(); ++i) {
@@ -168,7 +163,7 @@ public class JavaCodeGenerator {
 		// Construct method
 		JavaFile.Method method = new JavaFile.Method("equals", JavaFile.BOOLEAN);
 		method.getModifiers().add(JavaFile.Modifier.PUBLIC);
-		method.getParameters().add(new Pair<JavaFile.Type,String>(new JavaFile.Reference("Object"),"other"));
+		method.getParameters().add(new JavaFile.VariableDeclaration(new JavaFile.Reference("Object"),"other"));
 		method.setBody(block);
 		//
 		return method;

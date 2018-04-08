@@ -15,7 +15,6 @@ import wybs.lang.CompilationUnit;
 import wybs.util.AbstractCompilationUnit;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
-import wycc.util.Pair;
 import wyjc.io.JavaFileWriter;
 
 public class JavaFile extends AbstractCompilationUnit {
@@ -77,7 +76,7 @@ public class JavaFile extends AbstractCompilationUnit {
 	 * @author David J. Pearce
 	 *
 	 */
-	public interface Declaration {
+	public interface Declaration extends Term {
 		List<Modifier> getModifiers();
 	}
 
@@ -159,7 +158,7 @@ public class JavaFile extends AbstractCompilationUnit {
 	 */
 	public static class Method extends AbstractDeclaration implements Declaration {
 		private Type returnType;
-		private List<Pair<Type,String>> parameters = new ArrayList<>();
+		private List<VariableDeclaration> parameters = new ArrayList<>();
 		private Block body;
 
 		public Method(String name, Type returnType) {
@@ -171,7 +170,7 @@ public class JavaFile extends AbstractCompilationUnit {
 			return returnType;
 		}
 
-		public List<Pair<Type,String>> getParameters() {
+		public List<VariableDeclaration> getParameters() {
 			return parameters;
 		}
 
@@ -185,14 +184,14 @@ public class JavaFile extends AbstractCompilationUnit {
 	}
 
 	public static class Constructor extends AbstractDeclaration implements Declaration {
-		private List<Pair<Type,String>> parameters = new ArrayList<>();
+		private List<VariableDeclaration> parameters = new ArrayList<>();
 		private Block body;
 
 		public Constructor(String name) {
 			super(name);
 		}
 
-		public List<Pair<Type,String>> getParameters() {
+		public List<VariableDeclaration> getParameters() {
 			return parameters;
 		}
 
@@ -205,18 +204,45 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
-	public static class Field extends AbstractDeclaration implements Declaration {
-		private Type type;
+	public static class Field extends VariableDeclaration implements Declaration {
 
 		public Field(Type type, String name) {
+			super(type,name);
+		}
+
+		public Field(Type type, String name, Term initialiser) {
+			super(type,name,initialiser);
+		}
+	}
+
+	public static class VariableDeclaration extends AbstractDeclaration implements Term {
+		private Type type;
+		private Term initialiser;
+
+		public VariableDeclaration(Type type, String name) {
 			super(name);
 			this.type = type;
+		}
+
+		public VariableDeclaration(Type type, String name, Term initialiser) {
+			super(name);
+			this.type = type;
+			this.initialiser = initialiser;
 		}
 
 		public Type getType() {
 			return type;
 		}
+
+		public boolean hasInitialisr() {
+			return initialiser != null;
+		}
+
+		public Term getInitialiser() {
+			return initialiser;
+		}
 	}
+
 
 	/**
 	 * Represents either a statement or expression in a Java source file.
@@ -229,7 +255,15 @@ public class JavaFile extends AbstractCompilationUnit {
 	}
 
 	public static class Block implements Term {
-		private List<Term> terms = new ArrayList<>();
+		private List<Term> terms;
+
+		public Block() {
+			terms = new ArrayList<>();
+		}
+
+		public Block(List<Term> terms) {
+			this.terms = new ArrayList<>(terms);
+		}
 
 		public List<Term> getTerms() {
 			return terms;
@@ -344,6 +378,36 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class For implements Term {
+		private VariableDeclaration initialiser;
+		private Term condition;
+		private Term increment;
+		private Block body;
+
+		public For(VariableDeclaration initialiser, Term condition, Term increment, Block body) {
+			this.initialiser = initialiser;
+			this.condition = condition;
+			this.increment = increment;
+			this.body = body;
+		}
+
+		public VariableDeclaration getInitialiser() {
+			return initialiser;
+		}
+
+		public Term getCondition() {
+			return condition;
+		}
+
+		public Term getIncrement() {
+			return increment;
+		}
+
+		public Block getBody() {
+			return body;
+		}
+	}
+
 	public static class FieldAccess implements Term {
 		private Term src;
 		private String field;
@@ -386,6 +450,36 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
+	public static class IfElse implements Term {
+		private List<Case> cases;
+
+		public IfElse(List<Case> cases) {
+			this.cases = cases;
+		}
+
+		public List<Case> getCases() {
+			return cases;
+		}
+
+		public static class Case implements Term {
+			private Term condition;
+			private Block body;
+
+			public Case(Term label, Block body) {
+				this.condition = label;
+				this.body = body;
+			}
+
+			public Term getLabel() {
+				return condition;
+			}
+
+			public Block getBlock() {
+				return body;
+			}
+		}
+	}
+
 	public static class InstanceOf implements Term {
 		private Term lhs;
 		private Type rhs;
@@ -405,11 +499,20 @@ public class JavaFile extends AbstractCompilationUnit {
 	}
 
 	public static class Invoke implements Term {
+		private List<Type> typeArguments;
 		private Term receiver;
 		private List<String> path;
 		private List<Term> arguments;
 
 		public Invoke(Term receiver, String name, Term... arguments) {
+			this.receiver = receiver;
+			this.path = new ArrayList<>();
+			this.path.add(name);
+			this.arguments = Arrays.asList(arguments);
+		}
+
+		public Invoke(Type[] typeArgs, Term receiver, String name, Term... arguments) {
+			this.typeArguments = Arrays.asList(typeArgs);
 			this.receiver = receiver;
 			this.path = new ArrayList<>();
 			this.path.add(name);
@@ -422,10 +525,22 @@ public class JavaFile extends AbstractCompilationUnit {
 			this.arguments = Arrays.asList(arguments);
 		}
 
+		public Invoke(Term receiver, String name, List<Term> arguments) {
+			this.receiver = receiver;
+			this.path = new ArrayList<>();
+			this.path.add(name);
+			this.arguments = new ArrayList<>(arguments);
+		}
+
+
 		public Invoke(Term receiver, List<String> path, List<Term> arguments) {
 			this.receiver = receiver;
 			this.path = new ArrayList<>(path);
 			this.arguments = new ArrayList<>(arguments);
+		}
+
+		public List<Type> getTypeArguments() {
+			return typeArguments;
 		}
 
 		public Term getReceiver() {
@@ -438,6 +553,24 @@ public class JavaFile extends AbstractCompilationUnit {
 
 		public List<Term> getArguments() {
 			return arguments;
+		}
+	}
+
+	public static class Lambda implements Term {
+		private List<VariableDeclaration> parameters;
+		private Term body;
+
+		public Lambda(List<VariableDeclaration> parameters, Term body) {
+			this.parameters = parameters;
+			this.body = body;
+		}
+
+		public List<VariableDeclaration> getParameters() {
+			return parameters;
+		}
+
+		public Term getBody() {
+			return body;
 		}
 	}
 
@@ -557,22 +690,15 @@ public class JavaFile extends AbstractCompilationUnit {
 		}
 	}
 
-	public static class VariableDeclaration extends AbstractDeclaration implements Term {
-		private Type type;
-		private Term initialiser;
+	public static class Throw implements Term {
+		private JavaFile.Term term;
 
-		public VariableDeclaration(Type type, String name, Term initialiser) {
-			super(name);
-			this.type = type;
-			this.initialiser = initialiser;
+		public Throw(JavaFile.Term term) {
+			this.term = term;
 		}
 
-		public Type getType() {
-			return type;
-		}
-
-		public Term getInitialiser() {
-			return initialiser;
+		public Term getClause() {
+			return term;
 		}
 	}
 
@@ -613,7 +739,7 @@ public class JavaFile extends AbstractCompilationUnit {
 	 * @author David J. Pearce
 	 *
 	 */
-	public interface Type {
+	public interface Type extends Term {
 
 	}
 
