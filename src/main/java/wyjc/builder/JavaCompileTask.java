@@ -776,11 +776,6 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	}
 
 	@Override
-	public JavaFile.Type visitAny(Type.Any type, JavaFile.Class parent) {
-		return JAVA_LANG_OBJECT;
-	}
-
-	@Override
 	public JavaFile.Type visitNull(Type.Null type, JavaFile.Class parent) {
 		return JAVA_LANG_OBJECT;
 	}
