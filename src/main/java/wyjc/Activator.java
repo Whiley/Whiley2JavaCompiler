@@ -5,21 +5,28 @@ import java.io.*;
 import jasm.io.ClassFileReader;
 import jasm.io.ClassFileWriter;
 import jasm.lang.ClassFile;
-import wycc.lang.Command;
+import wybs.lang.Build;
+import wybs.lang.Build.Project;
+import wybs.lang.Build.Task;
+import wybs.util.AbstractCompilationUnit.Value;
+import wyc.lang.WhileyFile;
+import wycc.cfg.Configuration;
 import wycc.lang.Module;
-import wycc.util.Logger;
 import wyfs.lang.Content;
 import wyfs.lang.Path;
-import wyjc.commands.JavaCompile;
-import wyjc.commands.JvmCompile;
-import wyjc.commands.JvmRun;
+import wyfs.lang.Path.ID;
+import wyfs.lang.Content.Type;
+import wyfs.util.Trie;
+import wyjc.builder.JavaCompileTask;
+import wyjc.core.JavaFile;
 
 public class Activator implements Module.Activator {
+
 	// =========================================================================
 	// Content Type
 	// =========================================================================
 
-	public static final Content.Type<ClassFile> ContentType = new Content.Type<ClassFile>() {
+	public static final Content.Type<ClassFile> ClassContentType = new Content.Type<ClassFile>() {
 		public Path.Entry<ClassFile> accept(Path.Entry<?> e) {
 			if (e.contentType() == this) {
 				return (Path.Entry<ClassFile>) e;
@@ -53,40 +60,66 @@ public class Activator implements Module.Activator {
 	};
 
 	// =======================================================================
-	// Content Registry
+	// Build Platform
 	// =======================================================================
 
-	/**
-	 * Default implementation of a content registry. This associates whiley and
-	 * wyil files with their respective content types.
-	 *
-	 * @author David J. Pearce
-	 *
-	 */
-	public static class Registry extends wyc.Activator.Registry {
-		@Override
-		public void associate(Path.Entry e) {
-			String suffix = e.suffix();
+	private static Build.Platform JAVA_PLATFORM = new Build.Platform() {
 
-			if (suffix.equals("class")) {
-				e.associate(ContentType, null);
-			} else {
-				super.associate(e);
-			}
+		@Override
+		public String getName() {
+			return "java";
 		}
 
 		@Override
-		public String suffix(Content.Type<?> t) {
-			return t.getSuffix();
+		public Configuration.Schema getConfigurationSchema() {
+			return Configuration.EMPTY_SCHEMA;
 		}
-	}
 
-	/**
-	 * The master project content type registry. This is needed for the build
-	 * system to determine the content type of files it finds on the file
-	 * system.
-	 */
-	public final Content.Registry registry = new Registry();
+		@Override
+		public void apply(Configuration configuration) {
+
+		}
+
+		@Override
+		public Task initialise(Build.Project project) {
+			return new JavaCompileTask(project);
+		}
+
+		@Override
+		public Type<?> getSourceType() {
+			return WhileyFile.BinaryContentType;
+		}
+
+		@Override
+		public Type<?> getTargetType() {
+			return JavaFile.ContentType;
+		}
+
+		@Override
+		public Content.Filter<?> getSourceFilter() {
+			return Content.filter("**", WhileyFile.BinaryContentType);
+		}
+
+		@Override
+		public Content.Filter<?> getTargetFilter() {
+			return Content.filter("**", JavaFile.ContentType);
+		}
+
+		@Override
+		public Path.Root getSourceRoot(Path.Root root) throws IOException {
+			return root.createRelativeRoot(Trie.fromString("bin"));
+		}
+
+		@Override
+		public Path.Root getTargetRoot(Path.Root root) throws IOException {
+			return root.createRelativeRoot(Trie.fromString("bin/java"));
+		}
+
+		@Override
+		public void execute(Project project, ID path, String name, Value... args) {
+			throw new IllegalArgumentException("native Java execution currently unsupported");
+		}
+	};
 
 	// =======================================================================
 	// Start
@@ -94,17 +127,11 @@ public class Activator implements Module.Activator {
 
 	@Override
 	public Module start(Module.Context context) {
-		// FIXME: logger is a hack!
-		final Logger logger = new Logger.Default(System.err);
-		// List of commands to use
-		final Command[] commands = {
-				new JvmCompile(registry, logger),
-				new JavaCompile(registry, logger),
-				new JvmRun(registry, logger)};
-		// Register all commands
-		for (Command c : commands) {
-			context.register(wycc.lang.Command.class, c);
-		}
+		// Register build platform
+		context.register(Build.Platform.class, JAVA_PLATFORM);
+		// Register Java Content Types
+		context.register(Content.Type.class, JavaFile.ContentType);
+		context.register(Content.Type.class, ClassContentType);
 		// Done
 		return new Module() {
 			// what goes here?

@@ -12,7 +12,6 @@ import wyc.lang.WhileyFile;
 import wyc.lang.WhileyFile.Decl;
 import wyc.lang.WhileyFile.Expr;
 import wyc.lang.WhileyFile.Type;
-import wyil.type.TypeSystem;
 import wyjc.core.JavaFile;
 import wyjc.core.JavaFile.Declaration;
 import wyjc.core.JavaFile.Term;
@@ -78,10 +77,10 @@ import wyjc.core.JavaFile.Term;
  * @return
  */
 public class TypeTestGenerator implements CodeGenerator<Expr.Is> {
-	private TypeSystem typeSystem;
+	private NameResolver typeSystem;
 	private HashMap<Type,JavaFile.Method> declarations = new HashMap<>();
 
-	public TypeTestGenerator(TypeSystem typeSystem) {
+	public TypeTestGenerator(NameResolver typeSystem) {
 		this.typeSystem = typeSystem;
 	}
 
@@ -157,9 +156,9 @@ public class TypeTestGenerator implements CodeGenerator<Expr.Is> {
 		List<JavaFile.Term> stmts = new ArrayList<>();
 		JavaFile.Term var_r = new JavaFile.VariableAccess("r");
 		JavaFile.Term var_v = new JavaFile.VariableAccess("v");
-		Tuple<Decl.Variable> fields = type.getFields();
+		Tuple<Type.Field> fields = type.getFields();
 		for (int i = 0; i != fields.size(); ++i) {
-			Decl.Variable field = fields.get(i);
+			Type.Field field = fields.get(i);
 			JavaFile.Term fieldTest = new JavaFile.Invoke(var_v, "has", new JavaFile.Constant(field.getName().get()));
 			JavaFile.Term access = new JavaFile.Invoke(var_v, "get", new JavaFile.Constant(field.getName().get()));
 			JavaFile.Term typeTest = generate(field.getType(), access);

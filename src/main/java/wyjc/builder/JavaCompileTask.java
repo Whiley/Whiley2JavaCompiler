@@ -19,6 +19,7 @@ import wyc.lang.WhileyFile;
 import wyc.lang.WhileyFile.Decl;
 import wyc.util.AbstractConsumer;
 import wyc.util.AbstractFunction;
+import wyc.util.WhileyFileResolver;
 import wybs.lang.Build.Graph;
 import wycc.util.Logger;
 import wycc.util.Pair;
@@ -26,7 +27,6 @@ import wyfs.lang.Path;
 import wyfs.lang.Path.Entry;
 import wyfs.lang.Path.Root;
 import wyfs.util.Trie;
-import wyil.type.TypeSystem;
 
 import static wyc.lang.WhileyFile.*;
 
@@ -42,10 +42,11 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	protected final Build.Project project;
 
 	/**
-	 * The type system is useful for managing nominal types and converting them into
-	 * their underlying types.
+	 * Provides mechanism for operating on types. For example, expanding them
+	 * and performing subtype tests, etc. This object may cache results to
+	 * improve performance of some operations.
 	 */
-	protected final TypeSystem typeSystem;
+	protected final NameResolver typeSystem;
 
 	/**
 	 * For logging information.
@@ -61,7 +62,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	public JavaCompileTask(Build.Project project) {
 		this.project = project;
-		this.typeSystem = new TypeSystem(project);
+		this.typeSystem = new WhileyFileResolver(project);
 		this.typeTestGen = new TypeTestGenerator(typeSystem);
 	}
 
@@ -776,33 +777,33 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	}
 
 	@Override
-	public JavaFile.Type visitNull(Type.Null type, JavaFile.Class parent) {
+	public JavaFile.Type visitTypeNull(Type.Null type, JavaFile.Class parent) {
 		return JAVA_LANG_OBJECT;
 	}
 
 	@Override
-	public JavaFile.Type visitBool(Type.Bool type, JavaFile.Class parent) {
+	public JavaFile.Type visitTypeBool(Type.Bool type, JavaFile.Class parent) {
 		return JavaFile.BOOLEAN;
 	}
 
 	@Override
-	public JavaFile.Type visitByte(Type.Byte type, JavaFile.Class parent) {
+	public JavaFile.Type visitTypeByte(Type.Byte type, JavaFile.Class parent) {
 		return JavaFile.BYTE;
 	}
 
 	@Override
-	public JavaFile.Type visitInt(Type.Int type, JavaFile.Class parent) {
+	public JavaFile.Type visitTypeInt(Type.Int type, JavaFile.Class parent) {
 		// FIXME: want to optimise this
 		return JAVA_MATH_BIGINTEGER;
 	}
 
 	@Override
-	public JavaFile.Type visitArray(Type.Array type, JavaFile.Class parent) {
+	public JavaFile.Type visitTypeArray(Type.Array type, JavaFile.Class parent) {
 		return new JavaFile.Array(visitType(type.getElement(), parent));
 	}
 
 	@Override
-	public JavaFile.Type visitNominal(Type.Nominal type, JavaFile.Class parent) {
+	public JavaFile.Type visitTypeNominal(Type.Nominal type, JavaFile.Class parent) {
 		try {
 			Decl.Type decl = typeSystem.resolveExactly(type.getName(), Decl.Type.class);
 			return visitType(decl.getType(), parent);
@@ -812,38 +813,24 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	}
 
 	@Override
-	public JavaFile.Type visitRecord(Type.Record type, JavaFile.Class parent) {
+	public JavaFile.Type visitTypeRecord(Type.Record type, JavaFile.Class parent) {
 		return WHILEY_RECORD;
 	}
 
 	@Override
-	public JavaFile.Type visitCallable(Type.Callable type, JavaFile.Class parent) {
+	public JavaFile.Type visitTypeCallable(Type.Callable type, JavaFile.Class parent) {
 		// FIXME: this is a hack for now
 		return new JavaFile.Reference("Function");
 	}
 
 	@Override
-	public JavaFile.Type visitUnion(Type.Union type, JavaFile.Class parent) {
+	public JavaFile.Type visitTypeUnion(Type.Union type, JavaFile.Class parent) {
 		JavaFile.Type result = null;
 		for (int i = 0; i != type.size(); ++i) {
 			JavaFile.Type next = visitType(type.get(i), parent);
 			result = union(result, next);
 		}
 		return result;
-	}
-
-	@Override
-	public JavaFile.Type visitIntersection(Type.Intersection type, JavaFile.Class parent) {
-		try {
-			Type simplified = typeSystem.extractReadableType(type, null);
-			if(simplified instanceof Type.Intersection) {
-				return JAVA_LANG_OBJECT;
-			} else {
-				return visitType(simplified, parent);
-			}
-		} catch(NameResolver.ResolutionError e) {
-			throw new RuntimeException(e);
-		}
 	}
 
 	/**
@@ -1084,7 +1071,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		} else {
 			// Must be a record.
 			Type.Record rec = (Type.Record) type;
-			Tuple<Decl.Variable> fields = rec.getFields();
+			Tuple<Type.Field> fields = rec.getFields();
 			StringBuilder builder = new StringBuilder();
 			for (int i = 0; i != fields.size(); ++i) {
 				if (i != 0) {
@@ -1285,9 +1272,9 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		// Translate field initialisers
 		JavaFile.VariableAccess var = new JavaFile.VariableAccess("var");
 		ArrayList<JavaFile.Term> initialisers = new ArrayList<>();
-		Tuple<Decl.Variable> fields = target.getFields();
+		Tuple<Type.Field> fields = target.getFields();
 		for (int i = 0; i != fields.size(); ++i) {
-			Decl.Variable field = fields.get(i);
+			Type.Field field = fields.get(i);
 			initialisers.add(new JavaFile.FieldAccess(var, field.getName().get()));
 		}
 		// Done
@@ -1296,9 +1283,9 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	private List<JavaFile.Field> visitFieldDeclarations(Type.Record type) {
 		ArrayList<JavaFile.Field> fields = new ArrayList<>();
-		Tuple<Decl.Variable> typeFields = type.getFields();
+		Tuple<Type.Field> typeFields = type.getFields();
 		for (int i = 0; i != typeFields.size(); ++i) {
-			Decl.Variable f = typeFields.get(i);
+			Type.Field f = typeFields.get(i);
 			JavaFile.Type fieldType = visitType(f.getType(), null);
 			fields.add(new JavaFile.Field(fieldType, f.getName().toString()));
 		}
@@ -1306,20 +1293,22 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	}
 
 	public boolean isDynamicallySized(Type type) {
-		try {
-			// FIXME: this is basically completely broken.
-			if (typeSystem.isRawCoerciveSubtype(Type.Bool, type, null)) {
-				return false;
-			} else if (typeSystem.isRawCoerciveSubtype(Type.Byte, type, null)) {
-				return false;
-			} else if (typeSystem.isRawCoerciveSubtype(Type.Null, type, null)) {
-				return false;
-			} else {
-				return true;
-			}
-		} catch (NameResolver.ResolutionError e) {
-			throw new RuntimeException(e);
-		}
+//		try {
+//			// FIXME: this is basically completely broken.
+//			if (typeSystem.isRawCoerciveSubtype(Type.Bool, type, null)) {
+//				return false;
+//			} else if (typeSystem.isRawCoerciveSubtype(Type.Byte, type, null)) {
+//				return false;
+//			} else if (typeSystem.isRawCoerciveSubtype(Type.Null, type, null)) {
+//				return false;
+//			} else {
+//				return true;
+//			}
+//		} catch (NameResolver.ResolutionError e) {
+//			throw new RuntimeException(e);
+//		}
+		// FIXME: need to update this
+		return true;
 	}
 
 	private static Type TYPE(String... args) {
