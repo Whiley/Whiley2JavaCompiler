@@ -1,8 +1,8 @@
 
 
-type liststr is int[] | int[]
+type liststr is int[]
 
-function index(liststr l, int index) -> any
+function index(liststr l, int index) -> int
     requires index >= 0 && index < |l|:
     //
     return l[index]
