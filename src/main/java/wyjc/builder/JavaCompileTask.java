@@ -11,15 +11,10 @@ import java.math.BigInteger;
 import java.util.*;
 
 import wybs.lang.Build;
-import wybs.lang.NameID;
-import wybs.lang.NameResolver;
-import wybs.lang.NameResolver.ResolutionError;
 import wybs.util.AbstractCompilationUnit.Tuple;
 import wyc.lang.WhileyFile;
-import wyc.lang.WhileyFile.Decl;
-import wyc.util.AbstractConsumer;
-import wyc.util.AbstractFunction;
-import wyc.util.WhileyFileResolver;
+import wyil.lang.WyilFile;
+import wyil.lang.WyilFile.Decl;
 import wybs.lang.Build.Graph;
 import wycc.util.Logger;
 import wycc.util.Pair;
@@ -27,8 +22,10 @@ import wyfs.lang.Path;
 import wyfs.lang.Path.Entry;
 import wyfs.lang.Path.Root;
 import wyfs.util.Trie;
+import wyil.util.AbstractConsumer;
+import wyil.util.AbstractFunction;
 
-import static wyc.lang.WhileyFile.*;
+import static wyil.lang.WyilFile.*;
 
 import wyjc.core.JavaFile;
 import wyjc.util.JavaCodeGenerator;
@@ -40,13 +37,6 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	 * defined in external resources (e.g. jar files).
 	 */
 	protected final Build.Project project;
-
-	/**
-	 * Provides mechanism for operating on types. For example, expanding them
-	 * and performing subtype tests, etc. This object may cache results to
-	 * improve performance of some operations.
-	 */
-	protected final NameResolver typeSystem;
 
 	/**
 	 * For logging information.
@@ -62,8 +52,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	public JavaCompileTask(Build.Project project) {
 		this.project = project;
-		this.typeSystem = new WhileyFileResolver(project);
-		this.typeTestGen = new TypeTestGenerator(typeSystem);
+		this.typeTestGen = new TypeTestGenerator();
 	}
 
 	public void setLogger(Logger logger) {
@@ -87,17 +76,17 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		HashSet<Path.Entry<?>> generatedFiles = new HashSet<>();
 
 		for (Pair<Path.Entry<?>, Path.Root> p : delta) {
-			Path.Root dst = p.second();
-			Path.Entry<WhileyFile> source = (Path.Entry<WhileyFile>) p.first();
-			Path.Entry<JavaFile> target = dst.create(source.id(), JavaFile.ContentType);
-			graph.registerDerivation(source, target);
-			generatedFiles.add(target);
-
-			// Construct the file
-			JavaFile contents = build(source, target);
-
-			// Write class file into its destination
-			target.write(contents);
+			Path.Entry<?> entry = p.first();
+			if (entry.contentType() == WyilFile.ContentType) {
+				Path.Root dst = p.second();
+				Path.Entry<WyilFile> source = (Path.Entry<WyilFile>) p.first();
+				Path.Entry<JavaFile> target = dst.create(source.id(), JavaFile.ContentType);
+				generatedFiles.add(target);
+				// Construct the file
+				JavaFile contents = build(source, target);
+				// Write class file into its destination
+				target.write(contents);
+			}
 		}
 
 		// ========================================================================
@@ -111,9 +100,9 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		return generatedFiles;
 	}
 
-	private JavaFile build(Path.Entry<WhileyFile> source, Path.Entry<JavaFile> target) throws IOException {
+	private JavaFile build(Path.Entry<WyilFile> source, Path.Entry<JavaFile> target) throws IOException {
 		// Read the source file, which forces it to be parsed, etc.
-		WhileyFile wf = source.read();
+		WyilFile wf = source.read();
 		// Reset the list of coercions
 		coercions = new ArrayList<>();
 		// Create an (empty) output file to contains the generated Java source
@@ -133,7 +122,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		jcd.getModifiers().add(JavaFile.Modifier.PUBLIC);
 		jcd.getModifiers().add(JavaFile.Modifier.FINAL);
 		// Translate all declarations
-		visitWhileyFile(wf, jcd);
+		visitModule(wf, jcd);
 		// Add all type tests
 		jcd.getDeclarations().addAll(typeTestGen.generateSupplementaryDeclarations());
 		// Add all required coercions
@@ -678,7 +667,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		Tuple<Expr> operands = expr.getOperands();
 		List<JavaFile.Term> arguments = new ArrayList<>();
 		// FIXME: need to do better here
-		path.add(expr.getName().toNameID().name());
+		path.add(expr.getName().toString());
 		for (int i = 0; i != operands.size(); ++i) {
 			arguments.add(visitExpression(operands.get(i), parent));
 		}
@@ -693,7 +682,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	@Override
 	public JavaFile.Term visitLambdaAccess(Expr.LambdaAccess expr, JavaFile.Class parent) {
-		Tuple<Type> types = expr.getSignature().getParameters();
+		Tuple<Type> types = expr.getDeclaration().getType().getParameters();
 		List<JavaFile.VariableDeclaration> parameters = new ArrayList<>();
 		List<JavaFile.Term> arguments = new ArrayList<>();
 		for (int i = 0; i != types.size(); ++i) {
@@ -704,7 +693,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		}
 		List<String> path = new ArrayList<>();
 		// FIXME: need to do better here
-		path.add(expr.getName().toNameID().name());
+		path.add(expr.getName().toString());
 		JavaFile.Term body = new JavaFile.Invoke(null, path, arguments);
 		return new JavaFile.Lambda(parameters, body);
 	}
@@ -804,12 +793,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	@Override
 	public JavaFile.Type visitTypeNominal(Type.Nominal type, JavaFile.Class parent) {
-		try {
-			Decl.Type decl = typeSystem.resolveExactly(type.getName(), Decl.Type.class);
-			return visitType(decl.getType(), parent);
-		} catch (NameResolver.ResolutionError e) {
-			throw new RuntimeException(e);
-		}
+		return visitType(type.getDeclaration().getType(), parent);
 	}
 
 	@Override
@@ -880,7 +864,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	 * @param jcs
 	 * @param wf
 	 */
-	private void addMainLauncher(WhileyFile wf, JavaFile.Class jcs) {
+	private void addMainLauncher(WyilFile wf, JavaFile.Class jcs) {
 		Decl.Method mainMethod = findMainMethod(wf);
 		//
 		if (mainMethod != null) {
@@ -908,22 +892,24 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	 * @param wf
 	 * @return
 	 */
-	private Decl.Method findMainMethod(WhileyFile wf) {
-		Tuple<Decl> declarations = wf.getDeclarations();
-		for (int i = 0; i != declarations.size(); ++i) {
-			Decl decl = declarations.get(i);
-			if (decl instanceof Decl.Method) {
-				Decl.Method meth = (Decl.Method) decl;
-				if (isMainMethod(meth)) {
-					return meth;
+	private Decl.Method findMainMethod(WyilFile wf) {
+		for(Decl.Unit unit : wf.getModule().getUnits()) {
+			Tuple<Decl> declarations = unit.getDeclarations();
+			for (int i = 0; i != declarations.size(); ++i) {
+				Decl decl = declarations.get(i);
+				if (decl instanceof Decl.Method) {
+					Decl.Method meth = (Decl.Method) decl;
+					if (isMainMethod(meth)) {
+						return meth;
+					}
 				}
 			}
 		}
 		return null;
 	}
 
-	private static final Type.Array ARGS_ARR_T = new Type.Array(
-			new Type.Nominal(new Name(new Identifier("ascii"), new Identifier("string"))));
+	private static final Type.Array ARGS_ARR_T = new Type.Array(Type.Int);
+
 	private static final Type.Method MAIN_METHOD_T = new Type.Method(new Tuple<Type>(ARGS_ARR_T), new Tuple<>(),
 			new Tuple<>(), new Tuple<>());
 
@@ -1028,19 +1014,19 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	 */
 	private static final AbstractConsumer<HashSet<Decl.Variable>> usedVariableExtractor = new AbstractConsumer<HashSet<Decl.Variable>>() {
 		@Override
-		public void visitVariableAccess(WhileyFile.Expr.VariableAccess expr, HashSet<Decl.Variable> used) {
+		public void visitVariableAccess(Expr.VariableAccess expr, HashSet<Decl.Variable> used) {
 			used.add(expr.getVariableDeclaration());
 		}
 
 		@Override
-		public void visitUniversalQuantifier(WhileyFile.Expr.UniversalQuantifier expr, HashSet<Decl.Variable> used) {
+		public void visitUniversalQuantifier(Expr.UniversalQuantifier expr, HashSet<Decl.Variable> used) {
 			visitVariables(expr.getParameters(), used);
 			visitExpression(expr.getOperand(), used);
 			removeAllDeclared(expr.getParameters(), used);
 		}
 
 		@Override
-		public void visitExistentialQuantifier(WhileyFile.Expr.ExistentialQuantifier expr,
+		public void visitExistentialQuantifier(Expr.ExistentialQuantifier expr,
 				HashSet<Decl.Variable> used) {
 			visitVariables(expr.getParameters(), used);
 			visitExpression(expr.getOperand(), used);
@@ -1048,7 +1034,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		}
 
 		@Override
-		public void visitType(WhileyFile.Type type, HashSet<Decl.Variable> used) {
+		public void visitType(Type type, HashSet<Decl.Variable> used) {
 			// No need to visit types
 		}
 
@@ -1061,13 +1047,8 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 
 	private JavaFile.Term translateRecordSchema(Type type) {
 		if (type instanceof Type.Nominal) {
-			try {
-				Type.Nominal nom = (Type.Nominal) type;
-				Decl.Type decl = typeSystem.resolveExactly(nom.getName(), Decl.Type.class);
-				return translateRecordSchema(decl.getType());
-			} catch (NameResolver.ResolutionError e) {
-				throw new RuntimeException(e);
-			}
+			Type.Nominal nom = (Type.Nominal) type;
+			return translateRecordSchema(nom.getDeclaration().getType());
 		} else {
 			// Must be a record.
 			Type.Record rec = (Type.Record) type;
@@ -1251,21 +1232,11 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	}
 
 	private JavaFile.Term translateNominalUnknownCoercion(Type.Nominal target, Type source) {
-		try {
-			Decl.Type decl = typeSystem.resolveExactly(target.getName(), Decl.Type.class);
-			return translateCoercionBody(decl.getType(), source);
-		} catch (ResolutionError e) {
-			throw new RuntimeException(e);
-		}
+		return translateCoercionBody(target.getDeclaration().getType(), source);
 	}
 
 	private JavaFile.Term translateUnknownNominalCoercion(Type target, Type.Nominal source) {
-		try {
-			Decl.Type decl = typeSystem.resolveExactly(source.getName(), Decl.Type.class);
-			return translateCoercionBody(target, decl.getType());
-		} catch (ResolutionError e) {
-			throw new RuntimeException(e);
-		}
+		return translateCoercionBody(target, source.getDeclaration().getType());
 	}
 
 	private JavaFile.Term translateRecordRecordCoercion(Type.Record target, Type.Record source) {
@@ -1311,13 +1282,13 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		return true;
 	}
 
-	private static Type TYPE(String... args) {
-		Identifier[] components = new Identifier[args.length];
-		for (int i = 0; i != args.length; ++i) {
-			components[i] = new Identifier(args[i]);
-		}
-		return new Type.Nominal(new Name(components));
-	}
+//	private static Type TYPE(String... args) {
+//		Identifier[] components = new Identifier[args.length];
+//		for (int i = 0; i != args.length; ++i) {
+//			components[i] = new Identifier(args[i]);
+//		}
+//		return new Type.Nominal(new Name(components));
+//	}
 
 	private static JavaFile.Array JAVA_LANG_STRING_ARRAY = new JavaFile.Array(new JavaFile.Reference("String"));
 	private static JavaFile.Reference JAVA_MATH_BIGINTEGER = new JavaFile.Reference("BigInteger");
@@ -1379,20 +1350,15 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	 * @return
 	 * @throws ResolutionError
 	 */
-	private boolean isCopyable(WhileyFile.Type type) {
-		try {
-			if (type instanceof WhileyFile.Type.Primitive || type instanceof WhileyFile.Type.Callable) {
-				return true;
-			} else if (type instanceof WhileyFile.Type.Nominal) {
-				Type.Nominal tn = (Type.Nominal) type;
-				Decl.Type decl = typeSystem.resolveExactly(tn.getName(), Decl.Type.class);
-				return isCopyable(decl.getType());
-			} else {
-				// FIXME: could do better here, e.g. for immutable reference types
-				return false;
-			}
-		} catch (NameResolver.ResolutionError e) {
-			throw new RuntimeException(e);
+	private boolean isCopyable(WyilFile.Type type) {
+		if (type instanceof WyilFile.Type.Primitive || type instanceof WyilFile.Type.Callable) {
+			return true;
+		} else if (type instanceof WyilFile.Type.Nominal) {
+			Type.Nominal tn = (Type.Nominal) type;
+			return isCopyable(tn.getDeclaration().getType());
+		} else {
+			// FIXME: could do better here, e.g. for immutable reference types
+			return false;
 		}
 	}
 

@@ -1,17 +1,16 @@
 package wyjc.builder;
 
-import static wyc.lang.WhileyFile.*;
+import static wyil.lang.WyilFile.*;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 
-import wybs.lang.NameResolver;
-import wyc.lang.WhileyFile;
-import wyc.lang.WhileyFile.Decl;
-import wyc.lang.WhileyFile.Expr;
-import wyc.lang.WhileyFile.Type;
+import wyil.lang.WyilFile;
+import wyil.lang.WyilFile.Decl;
+import wyil.lang.WyilFile.Expr;
+import wyil.lang.WyilFile.Type;
 import wyjc.core.JavaFile;
 import wyjc.core.JavaFile.Declaration;
 import wyjc.core.JavaFile.Term;
@@ -77,12 +76,7 @@ import wyjc.core.JavaFile.Term;
  * @return
  */
 public class TypeTestGenerator implements CodeGenerator<Expr.Is> {
-	private NameResolver typeSystem;
 	private HashMap<Type,JavaFile.Method> declarations = new HashMap<>();
-
-	public TypeTestGenerator(NameResolver typeSystem) {
-		this.typeSystem = typeSystem;
-	}
 
 	/**
 	 * <p>
@@ -115,7 +109,7 @@ public class TypeTestGenerator implements CodeGenerator<Expr.Is> {
 	 * @param id
 	 * @return
 	 */
-	public Term generate(WhileyFile.Type type, JavaFile.Term operand) {
+	public Term generate(WyilFile.Type type, JavaFile.Term operand) {
 		JavaFile.Block body;
 		// First, attempt inline translation (if possible)
 		switch (type.getOpcode()) {
@@ -190,18 +184,13 @@ public class TypeTestGenerator implements CodeGenerator<Expr.Is> {
 	}
 
 	private JavaFile.Block generateTypeTest(Type.Nominal type) {
-		try {
-			Decl.Type decl = typeSystem.resolveExactly(type.getName(), Decl.Type.class);
-			// FIXME: problem here with recursive definitions.
-			// FIXME: problem here with type invariants
-			JavaFile.Block block = new JavaFile.Block();
-			JavaFile.Term var_o = new JavaFile.VariableAccess("o");
-			JavaFile.Term condition = generate(decl.getVariableDeclaration().getType(), var_o);
-			block.getTerms().add(new JavaFile.Return(condition));
-			return block;
-		} catch (NameResolver.ResolutionError e) {
-			throw new RuntimeException(e);
-		}
+		// FIXME: problem here with recursive definitions.
+		// FIXME: problem here with type invariants
+		JavaFile.Block block = new JavaFile.Block();
+		JavaFile.Term var_o = new JavaFile.VariableAccess("o");
+		JavaFile.Term condition = generate(type.getDeclaration().getType(), var_o);
+		block.getTerms().add(new JavaFile.Return(condition));
+		return block;
 	}
 
 	/**
