@@ -78,14 +78,17 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 		for (Pair<Path.Entry<?>, Path.Root> p : delta) {
 			Path.Entry<?> entry = p.first();
 			if (entry.contentType() == WyilFile.ContentType) {
-				Path.Root dst = p.second();
 				Path.Entry<WyilFile> source = (Path.Entry<WyilFile>) p.first();
-				Path.Entry<JavaFile> target = dst.create(source.id(), JavaFile.ContentType);
-				generatedFiles.add(target);
-				// Construct the file
-				JavaFile contents = build(source, target);
-				// Write class file into its destination
-				target.write(contents);
+				for(Path.Entry<?> child : graph.getChildren(entry)) {
+					Path.Entry<JavaFile> target = (Path.Entry<JavaFile>) child;
+					generatedFiles.add(target);
+					// 	Construct the file
+					JavaFile contents = build(source, target);
+					// Write class file into its destination
+					target.write(contents);
+					// Write contents to disk
+					target.flush();
+				}
 			}
 		}
 

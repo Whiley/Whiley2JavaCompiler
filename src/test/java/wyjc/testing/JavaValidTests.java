@@ -204,7 +204,7 @@ public class JavaValidTests {
  	/**
 	 * A simple default registry which knows about whiley files and wyil files.
 	 */
-	private static final Content.Registry registry = new wyc.Activator.Registry();
+	private static final Content.Registry registry = new TestUtils.Registry();
 
  	/**
 	 * Run the Whiley Compiler with the given list of arguments ot produce a
@@ -225,7 +225,7 @@ public class JavaValidTests {
 		try {
 			// Construct the project
 			DirectoryRoot root = new DirectoryRoot(whileydir, registry);
-			StdProject project = new StdProject(Arrays.asList(root));
+			StdProject project = new StdProject(root);
 			// Add build rules
 			addCompilationRules(project,root,false);
 			// Create empty build graph
