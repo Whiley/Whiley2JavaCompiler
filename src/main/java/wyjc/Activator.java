@@ -9,6 +9,7 @@ import wybs.lang.Build;
 import wybs.lang.Build.Graph;
 import wybs.lang.Build.Project;
 import wybs.lang.Build.Task;
+import wybs.lang.CompilationUnit.Name;
 import wybs.util.AbstractCompilationUnit.Value;
 import wyc.lang.WhileyFile;
 import wycc.cfg.Configuration;
@@ -20,6 +21,7 @@ import wyfs.lang.Path.Root;
 import wyfs.lang.Content.Type;
 import wyfs.util.Trie;
 import wyil.lang.WyilFile;
+import wyil.lang.WyilFile.Decl;
 import wyjc.builder.JavaCompileTask;
 import wyjc.core.JavaFile;
 
@@ -75,9 +77,9 @@ public class Activator implements Module.Activator {
 
 	private static Build.Platform JAVA_PLATFORM = new Build.Platform() {
 		private Trie pkg;
-		// Specify directory where generated JS files are dumped.
+		// Specify directory where generated whiley files are found
 		private Trie source;
-		// Specify directory where generated JS files are dumped.
+		// Specify directory where generated java files are dumped.
 		private Trie target;
 		// Specify whether debug mode enabled or not.
 		private boolean debug = true;
@@ -148,18 +150,23 @@ public class Activator implements Module.Activator {
 		public void refresh(Graph graph, Root src, Root bin) throws IOException {
 			// Basically, for the pkg wyil we will create a corresponding js file.
 			Path.Entry<WyilFile> source = src.get(pkg, WyilFile.ContentType);
-			Path.Entry<JavaFile> binary = bin.get(pkg, JavaFile.ContentType);
-			//
-			// FIXME: should handle multiple output java files!!
-			//
-			// Check whether target binary exists or not
-			if (binary == null) {
-				// Doesn't exist, so create with default value
-				binary = bin.create(pkg, JavaFile.ContentType);
-				binary.write(new JavaFile(binary));
+			for(Path.Entry<?> file : graph.getParents(source)) {
+				Path.Entry<JavaFile> binary = bin.get(file.id(), JavaFile.ContentType);
+				// Check whether target binary exists or not
+				if (binary == null) {
+					// Determine qualified id for module
+					Path.ID id = stripFirst(this.source.size(),file.id());
+					// Doesn't exist, so create with default value
+					binary = bin.create(id, JavaFile.ContentType);
+					binary.write(new JavaFile(binary));
+				}
+				// Register source converted by us into the java file.
+				graph.connect(source, binary);
 			}
-			// Register source converted by us into the java file.
-			graph.connect(source, binary);
+		}
+
+		private Path.ID stripFirst(int n, Path.ID id) {
+			return id.subpath(n, id.size());
 		}
 	};
 

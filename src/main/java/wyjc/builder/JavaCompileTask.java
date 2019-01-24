@@ -16,6 +16,7 @@ import wyc.lang.WhileyFile;
 import wyil.lang.WyilFile;
 import wyil.lang.WyilFile.Decl;
 import wybs.lang.Build.Graph;
+import wybs.lang.CompilationUnit.Name;
 import wycc.util.Logger;
 import wycc.util.Pair;
 import wyfs.lang.Path;
@@ -27,6 +28,7 @@ import wyil.util.AbstractFunction;
 
 import static wyil.lang.WyilFile.*;
 
+import wyjc.Activator;
 import wyjc.core.JavaFile;
 import wyjc.util.JavaCodeGenerator;
 
@@ -80,14 +82,16 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 			if (entry.contentType() == WyilFile.ContentType) {
 				Path.Entry<WyilFile> source = (Path.Entry<WyilFile>) p.first();
 				for(Path.Entry<?> child : graph.getChildren(entry)) {
-					Path.Entry<JavaFile> target = (Path.Entry<JavaFile>) child;
-					generatedFiles.add(target);
-					// 	Construct the file
-					JavaFile contents = build(source, target);
-					// Write class file into its destination
-					target.write(contents);
-					// Write contents to disk
-					target.flush();
+					if(child.contentType() == JavaFile.ContentType) {
+						Path.Entry<JavaFile> target = (Path.Entry<JavaFile>) child;
+						generatedFiles.add(target);
+						// 	Construct the file
+						JavaFile contents = build(source, target);
+						// Write class file into its destination
+						target.write(contents);
+						// Write contents to disk
+						target.flush();
+					}
 				}
 			}
 		}
@@ -106,36 +110,70 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	private JavaFile build(Path.Entry<WyilFile> source, Path.Entry<JavaFile> target) throws IOException {
 		// Read the source file, which forces it to be parsed, etc.
 		WyilFile wf = source.read();
-		// Reset the list of coercions
-		coercions = new ArrayList<>();
-		// Create an (empty) output file to contains the generated Java source
-		// code.
-		JavaFile jf = new JavaFile(target);
+		// Find the corresponding compilation unit
+		for(Decl.Unit unit : wf.getModule().getUnits()) {
+			// Check whether we've found the right one or not
+			if(endsWith(target.id(),unit.getName())) {
+				// Reset the list of coercions
+				coercions = new ArrayList<>();
+				// Create an (empty) output file to contains the generated Java source
+				// code.
+				JavaFile jf = new JavaFile(target);
 
-		// Add package declaration?
+				// Add package declaration?
 
-		// Add imports
-		jf.getDeclarations().add(new JavaFile.Import("java", "math", "BigInteger"));
-		jf.getDeclarations().add(new JavaFile.Import("java", "util", "Arrays"));
-		jf.getDeclarations().add(new JavaFile.Import("java", "util", "function", "Function"));
-		jf.getDeclarations().add(new JavaFile.Import("wyjc", "runtime", "Wy"));
+				// Add imports
+				jf.getDeclarations().add(new JavaFile.Import("java", "math", "BigInteger"));
+				jf.getDeclarations().add(new JavaFile.Import("java", "util", "Arrays"));
+				jf.getDeclarations().add(new JavaFile.Import("java", "util", "function", "Function"));
+				jf.getDeclarations().add(new JavaFile.Import("wyjc", "runtime", "Wy"));
 
-		String className = wf.getEntry().id().last();
-		JavaFile.Class jcd = new JavaFile.Class(className);
-		jcd.getModifiers().add(JavaFile.Modifier.PUBLIC);
-		jcd.getModifiers().add(JavaFile.Modifier.FINAL);
-		// Translate all declarations
-		visitModule(wf, jcd);
-		// Add all type tests
-		jcd.getDeclarations().addAll(typeTestGen.generateSupplementaryDeclarations());
-		// Add all required coercions
-		translateCoercions(coercions, jcd);
-		// Add launcher (if appropriate)
-		addMainLauncher(wf, jcd);
-		// Done
-		jf.getDeclarations().add(jcd);
-		return jf;
+				// Add other imports
+
+				String className = wf.getEntry().id().last();
+				JavaFile.Class jcd = new JavaFile.Class(className);
+				jcd.getModifiers().add(JavaFile.Modifier.PUBLIC);
+				jcd.getModifiers().add(JavaFile.Modifier.FINAL);
+				// Translate all declarations
+				visitUnit(unit, jcd);
+				// Add all type tests
+				jcd.getDeclarations().addAll(typeTestGen.generateSupplementaryDeclarations());
+				// Add all required coercions
+				translateCoercions(coercions, jcd);
+				// Add launcher (if appropriate)
+				addMainLauncher(wf, jcd);
+				// Done
+				jf.getDeclarations().add(jcd);
+				return jf;
+			}
+		}
+		//
+		throw new IllegalArgumentException("invalid target file: " + target.id());
 	}
+
+	// =======================================================================
+	// Misc
+	// =======================================================================
+
+	/**
+	 * Check whether a given path id ends with a given target name.
+	 *
+	 * @param name
+	 * @return
+	 */
+	public static boolean endsWith(Path.ID id, Name name) {
+		int diff = id.size() - name.size();
+		for (int i = 0; i != name.size(); ++i) {
+			if (!id.get(i + diff).equals(name.get(i).get())) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	// =======================================================================
+	// Translators
+	// =======================================================================
 
 	@Override
 	public JavaFile.Term visitDeclaration(Decl decl, JavaFile.Class parent) {
