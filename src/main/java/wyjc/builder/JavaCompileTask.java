@@ -15,7 +15,7 @@ import wybs.util.AbstractCompilationUnit.Tuple;
 import wyc.lang.WhileyFile;
 import wyil.lang.WyilFile;
 import wyil.lang.WyilFile.Decl;
-import wybs.lang.Build.Graph;
+import wybs.lang.Build.Executor;
 import wybs.lang.CompilationUnit.Name;
 import wycc.util.Logger;
 import wycc.util.Pair;
@@ -67,7 +67,7 @@ public class JavaCompileTask extends AbstractFunction<JavaFile.Class, JavaFile.T
 	}
 
 	@Override
-	public Set<Entry<?>> build(Collection<Pair<Entry<?>, Root>> delta, Graph graph) throws IOException {
+	public Set<Entry<?>> build(Collection<Pair<Entry<?>, Root>> delta, Executor graph) throws IOException {
 		Runtime runtime = Runtime.getRuntime();
 		long start = System.currentTimeMillis();
 		long memory = runtime.freeMemory();

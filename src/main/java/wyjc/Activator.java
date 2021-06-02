@@ -6,7 +6,7 @@ import jasm.io.ClassFileReader;
 import jasm.io.ClassFileWriter;
 import jasm.lang.ClassFile;
 import wybs.lang.Build;
-import wybs.lang.Build.Graph;
+import wybs.lang.Build.Executor;
 import wybs.lang.Build.Project;
 import wybs.lang.Build.Task;
 import wybs.lang.CompilationUnit.Name;
@@ -147,7 +147,7 @@ public class Activator implements Module.Activator {
 		}
 
 		@Override
-		public void refresh(Graph graph, Root src, Root bin) throws IOException {
+		public void refresh(Executor graph, Root src, Root bin) throws IOException {
 			// Basically, for the pkg wyil we will create a corresponding js file.
 			Path.Entry<WyilFile> source = src.get(pkg, WyilFile.ContentType);
 			for(Path.Entry<?> file : graph.getParents(source)) {

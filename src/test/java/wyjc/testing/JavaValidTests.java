@@ -53,8 +53,8 @@ import org.junit.runners.Parameterized.Parameters;
 
 import wybs.lang.Build;
 import wybs.lang.SyntaxError;
-import wybs.util.StdBuildGraph;
-import wybs.util.StdBuildRule;
+import wybs.util.AbstractBuildExecutor;
+import wybs.util.AbstractBuildRule;
 import wybs.util.StdProject;
 import wyc.lang.WhileyFile;
 import wyc.task.CompileTask;
@@ -229,7 +229,7 @@ public class JavaValidTests {
 			// Add build rules
 			addCompilationRules(project,root,false);
 			// Create empty build graph
-			Build.Graph graph = new StdBuildGraph();
+			Build.Executor graph = new AbstractBuildExecutor();
 			// Identify source files and build project
 			project.build(TestUtils.findSourceFiles(root,graph,args), graph);
 			// Flush any created resources (e.g. wyil files)
@@ -263,9 +263,9 @@ public class JavaValidTests {
 		CompileTask wyTask = new CompileTask(project);
 		JavaCompileTask javaTask = new JavaCompileTask(project);
 		// Add compilation rule(s) (whiley => wyil)
-		project.add(new StdBuildRule(wyTask, root, Content.filter("**", WhileyFile.ContentType), null, root));
+		project.add(new AbstractBuildRule(wyTask, root, Content.filter("**", WhileyFile.ContentType), null, root));
 		// Add compilation rule(s) (wyil => js)
-		project.add(new StdBuildRule(javaTask, root, Content.filter("**", WyilFile.ContentType), null, root));
+		project.add(new AbstractBuildRule(javaTask, root, Content.filter("**", WyilFile.ContentType), null, root));
 	}
 
 	/**
